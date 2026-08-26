@@ -8,3 +8,4 @@ release/
 .claude/settings.local.json
 packages/desktop/bin/
 packages/premiere/dist/
+shots/

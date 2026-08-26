@@ -94,7 +94,7 @@ vec3 ecSampleLut(vec3 c) {
   vec3 f = pos - base;
 
   // Texel centres, so we read stored nodes rather than blends of them.
-  vec3 inv = 1.0 / n;
+  vec3 inv = vec3(1.0 / n);
   vec3 b0 = (base + 0.5) * inv;
   vec3 b1 = (base + 1.5) * inv;
 

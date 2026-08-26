@@ -193,7 +193,15 @@ export class GradeRenderer {
 
     gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    // Images, video frames and decoded camera data all have row 0 at the top;
+    // GL puts row 0 at the bottom. Flipping once here, at the only place
+    // outside pixels enter the pipeline, keeps every downstream stage — the
+    // eyedropper, the scopes, the power window coordinates — on one
+    // convention. Flipping later instead means fixing it in five places and
+    // getting one of them wrong.
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, image as TexImageSource);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
 
     this.resizeTargets();
   }
@@ -216,6 +224,8 @@ export class GradeRenderer {
 
     gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    // Same top-down row order as the DOM sources above; see `setSource`.
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
 
     if (data instanceof Float32Array) {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, width, height, 0, gl.RGBA, gl.FLOAT, data);
@@ -231,6 +241,7 @@ export class GradeRenderer {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
     }
 
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     this.resizeTargets();
   }
 
@@ -695,6 +706,9 @@ export class GradeRenderer {
     gl.bindVertexArray(this.vao);
     this.blitProgram.use();
     this.blitProgram.texture('uTex', 0, this.zonesRT.texture);
+    // Scopes are statistical, so row order does not affect the result — but
+    // the palette and skin tools also read this buffer and present swatches
+    // back to the user, so it is kept upright.
     this.blitProgram.bool('uFlipY', true);
     drawFullscreen(gl);
 
@@ -751,6 +765,9 @@ export class GradeRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    // Explicitly unflipped: this lattice is generated here and read back by
+    // index, so its rows must arrive in the order they were written.
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, hald);
 
     const bakeBase = new RenderTarget(gl, width, height, { float: this.floatTargets, linear: false });

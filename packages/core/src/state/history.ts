@@ -124,6 +124,29 @@ export class History {
     this.emit();
   }
 
+  /**
+   * Drop the newest entry entirely.
+   *
+   * For a gesture that turned out to be a no-op — clicking a colour to
+   * inspect it and releasing without dragging. Pushing a compensating
+   * "undo" entry would work, but it leaves two dead steps on the timeline
+   * that the user then has to undo *through* to reach real work.
+   *
+   * Refuses when the cursor is not at the head (there is a redo branch to
+   * protect), when only the baseline entry remains, or when `mergeKey` does
+   * not match the head — so a stale call cannot eat someone else's edit.
+   */
+  discardLast(mergeKey: string | null = null): boolean {
+    if (this.entries.length < 2) return false;
+    if (this.cursor !== this.entries.length - 1) return false;
+    if (mergeKey !== null && this.entries[this.cursor].mergeKey !== mergeKey) return false;
+
+    this.entries.pop();
+    this.cursor = this.entries.length - 1;
+    this.emit();
+    return true;
+  }
+
   /** End a coalescing gesture so the next edit starts a fresh undo step. */
   breakMerge(): void {
     this.entries[this.cursor].mergeKey = null;
