@@ -19,7 +19,7 @@ import { Inspector } from './components/Inspector.js';
 import type { InspectorTab } from './components/Inspector.js';
 import { ScopesPanel } from './components/ScopesPanel.js';
 import type { ScopeKind } from './components/ScopesPanel.js';
-import { download, sanitise } from './components/panels/LutPanel.js';
+import { sanitise, saveTextFile } from './lib/download.js';
 import { useDesktopMedia } from './hooks/useDesktopMedia.js';
 import { getDesktopBridge } from './desktop/bridge.js';
 import { Transport } from './components/Transport.js';
@@ -115,7 +115,10 @@ function Workspace() {
           continue;
         }
 
-        if (name.endsWith(PROJECT_EXTENSION) || name.endsWith('.json')) {
+        // .txt is here because a sandboxed viewer that cannot write a
+        // .ecgrade file falls back to appending .txt — a project saved that
+        // way has to be openable again without the user renaming it first.
+        if (name.endsWith(PROJECT_EXTENSION) || name.endsWith('.json') || name.endsWith('.txt')) {
           try {
             const grade = deserialiseProject(await file.text());
             store.reset(grade, `Open ${file.name}`);
@@ -133,14 +136,16 @@ function Workspace() {
     [media, notify, renderer, store],
   );
 
-  const saveProject = () => {
+  const saveProject = async () => {
     const grade = store.getGrade();
-    download(
+    const result = await saveTextFile(
       serialiseProject(grade),
       `${sanitise(grade.name || 'easycolor-grade')}${PROJECT_EXTENSION}`,
       'application/json',
     );
-    notify('Grade saved.', 'success');
+
+    if (result.ok) notify(result.note ?? 'Grade saved.', 'success');
+    else if (result.note) notify(result.note, 'error');
   };
 
   const toggleScope = (kind: ScopeKind) => {
@@ -180,7 +185,7 @@ function Workspace() {
             else mediaInputRef.current?.click();
           }}
           onOpenProject={() => projectInputRef.current?.click()}
-          onSaveProject={saveProject}
+          onSaveProject={() => void saveProject()}
           showScopes={showScopes}
           onToggleScopes={toggleScopes}
           fps={renderer.fps}

@@ -4,6 +4,7 @@ import { useGrade, useStore } from '../../state/StoreContext.js';
 import type { RendererApi } from '../../hooks/useRenderer.js';
 import { Slider } from '../ui/Slider.js';
 import { Button, Checkbox, Section, Select, fmt } from '../ui/controls.js';
+import { sanitise, saveTextFile } from '../../lib/download.js';
 
 /**
  * LUT input and export.
@@ -74,12 +75,22 @@ export function LutPanel({ renderer, onNotify }: Props) {
     setBusy(true);
     // Yield first so the button's disabled state paints before the bake
     // blocks the main thread on a 65-cube.
-    window.setTimeout(() => {
+    window.setTimeout(async () => {
       try {
         const data = renderer.renderer!.bakeLut(grade, exportSize);
         const text = writeCube(exportSize, data, { title: grade.name || 'EasyColor grade' });
-        download(text, `${sanitise(grade.name || 'easycolor-grade')}.cube`, 'text/plain');
-        onNotify(`Exported a ${exportSize}³ LUT.`, 'success');
+
+        const result = await saveTextFile(
+          text,
+          `${sanitise(grade.name || 'easycolor-grade')}.cube`,
+          'text/plain',
+        );
+
+        if (result.ok) {
+          onNotify(result.note ?? `Exported a ${exportSize}³ LUT.`, 'success');
+        } else if (result.note) {
+          onNotify(result.note, 'error');
+        }
       } catch (e) {
         onNotify(e instanceof Error ? e.message : 'Could not bake the LUT.', 'error');
       } finally {
@@ -226,20 +237,3 @@ export function LutPanel({ renderer, onNotify }: Props) {
   );
 }
 
-function download(text: string, filename: string, type: string): void {
-  const blob = new Blob([text], { type });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  // Revoking immediately can cancel the download in some browsers; a short
-  // delay is the pragmatic fix everyone lands on.
-  window.setTimeout(() => URL.revokeObjectURL(url), 4000);
-}
-
-function sanitise(name: string): string {
-  return name.replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '') || 'easycolor-grade';
-}
-
-export { download, sanitise };
