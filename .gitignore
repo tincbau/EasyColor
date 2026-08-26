@@ -1,0 +1,10 @@
+node_modules/
+dist/
+build/
+out/
+release/
+*.tsbuildinfo
+.DS_Store
+.claude/settings.local.json
+packages/desktop/bin/
+packages/premiere/dist/

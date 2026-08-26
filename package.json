@@ -1,0 +1,28 @@
+{
+  "name": "easycolor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "EasyColor — a point-and-click cinematic colour grading studio for the web, Windows and Premiere Pro.",
+  "license": "MIT",
+  "workspaces": [
+    "packages/core",
+    "packages/web",
+    "packages/desktop",
+    "packages/premiere"
+  ],
+  "scripts": {
+    "build:core": "npm run build -w @easycolor/core",
+    "build:web": "npm run build -w @easycolor/web",
+    "build": "npm run build:core && npm run build:web",
+    "dev": "npm run dev -w @easycolor/web",
+    "typecheck": "tsc -b packages/core packages/web",
+    "test": "node --test packages/core/test/*.test.mjs",
+    "desktop:dev": "npm run dev -w @easycolor/desktop",
+    "desktop:dist": "npm run dist -w @easycolor/desktop",
+    "premiere:pack": "npm run pack -w @easycolor/premiere"
+  },
+  "engines": { "node": ">=20" },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}
