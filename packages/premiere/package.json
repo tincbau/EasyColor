@@ -1,0 +1,15 @@
+{
+  "name": "@easycolor/premiere",
+  "version": "1.0.0",
+  "private": true,
+  "description": "EasyColor panel for Adobe Premiere Pro (CEP extension).",
+  "scripts": {
+    "build:renderer": "cross-env EASYCOLOR_BASE=./ npm run build -w @easycolor/web",
+    "pack": "node scripts/pack.mjs",
+    "build": "npm run build:renderer && npm run pack",
+    "install:local": "node scripts/install.mjs"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3"
+  }
+}

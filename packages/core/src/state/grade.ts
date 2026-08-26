@@ -159,7 +159,14 @@ export interface PowerWindow {
   /** Centre in normalised viewer coords, 0..1 with y down. */
   cx: number;
   cy: number;
-  /** Half-extents, normalised. */
+  /**
+   * Half-extents, in units of frame *height* on both axes.
+   *
+   * Both radii share one axis deliberately: it makes the shape isotropic, so
+   * equal radii are a circle on any aspect ratio and the feather is the same
+   * width all the way round. Measuring rx against width instead would make
+   * every "circle" an oval on anything but a square frame.
+   */
   rx: number;
   ry: number;
   /** Rotation in degrees, clockwise. */
@@ -189,8 +196,8 @@ export function createWindow(id: string, shape: WindowShape): PowerWindow {
     shape,
     cx: 0.5,
     cy: 0.5,
-    rx: isVignette ? 0.62 : 0.22,
-    ry: isVignette ? 0.62 : 0.22,
+    rx: isVignette ? 0.78 : 0.22,
+    ry: isVignette ? 0.78 : 0.22,
     rotation: 0,
     softness: isVignette ? 0.8 : 0.4,
     corner: 0.15,

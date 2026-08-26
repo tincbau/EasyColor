@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  CEP extension manifest.
+
+  The host range deliberately starts at Premiere Pro 14.0 (2020) — that is
+  where the CEP 9 runtime and the Lumetri behaviour this panel relies on
+  settle down. The upper bound is left wide open: Adobe bumps the host
+  version every year and a tight bound would break the panel on release day
+  for no reason.
+-->
+<ExtensionManifest
+    Version="7.0"
+    ExtensionBundleId="com.easycolor.premiere"
+    ExtensionBundleVersion="1.0.0"
+    ExtensionBundleName="EasyColor"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+  <ExtensionList>
+    <Extension Id="com.easycolor.premiere.panel" Version="1.0.0" />
+  </ExtensionList>
+
+  <ExecutionEnvironment>
+    <HostList>
+      <Host Name="PPRO" Version="[14.0,99.9]" />
+    </HostList>
+    <LocaleList>
+      <Locale Code="All" />
+    </LocaleList>
+    <RequiredRuntimeList>
+      <RequiredRuntime Name="CSXS" Version="9.0" />
+    </RequiredRuntimeList>
+  </ExecutionEnvironment>
+
+  <DispatchInfoList>
+    <Extension Id="com.easycolor.premiere.panel">
+      <DispatchInfo>
+        <Resources>
+          <MainPath>./client/index.html</MainPath>
+          <ScriptPath>./host/index.jsx</ScriptPath>
+          <CEFCommandLine>
+            <!--
+              The grading pipeline is WebGL2. CEP's Chromium disables the GPU
+              by default in some hosts, which would drop the panel to a
+              software rasteriser and make the viewer unusable at anything
+              above SD.
+            -->
+            <Parameter>--enable-nodejs</Parameter>
+            <Parameter>--mixed-context</Parameter>
+            <Parameter>--ignore-gpu-blacklist</Parameter>
+            <Parameter>--enable-gpu-rasterization</Parameter>
+            <Parameter>--allow-file-access-from-files</Parameter>
+            <Parameter>--allow-file-access</Parameter>
+          </CEFCommandLine>
+        </Resources>
+        <Lifecycle>
+          <AutoVisible>true</AutoVisible>
+        </Lifecycle>
+        <UI>
+          <Type>Panel</Type>
+          <Menu>EasyColor</Menu>
+          <Geometry>
+            <Size>
+              <Height>720</Height>
+              <Width>1280</Width>
+            </Size>
+            <MinSize>
+              <Height>480</Height>
+              <Width>900</Width>
+            </MinSize>
+          </Geometry>
+          <!-- Neutral grey, matching the app, so the panel does not flash
+               white while it loads next to footage being judged. -->
+          <Icons />
+        </UI>
+      </DispatchInfo>
+    </Extension>
+  </DispatchInfoList>
+</ExtensionManifest>

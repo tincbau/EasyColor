@@ -732,3 +732,73 @@ select.field { cursor: pointer; }
     animation-duration: 0.01ms !important;
   }
 }
+
+/* ---------------------------------------------------------------- */
+/* Transport                                                         */
+/* ---------------------------------------------------------------- */
+
+.transport {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(16, 16, 16, 0.92);
+  border-top: 1px solid var(--line);
+  backdrop-filter: blur(4px);
+}
+
+.transport-time {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.transport-meta {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.transport-track {
+  position: relative;
+  flex: 1;
+  height: 22px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.transport-rail,
+.transport-fill {
+  position: absolute;
+  top: 50%;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: 2px;
+}
+
+.transport-rail {
+  left: 0;
+  right: 0;
+  background: var(--surface-3);
+}
+
+.transport-fill {
+  left: 0;
+  background: var(--accent-dim);
+}
+
+.transport-head {
+  position: absolute;
+  top: 50%;
+  width: 3px;
+  height: 14px;
+  margin: -7px 0 0 -1.5px;
+  background: var(--text);
+  border-radius: 1px;
+}

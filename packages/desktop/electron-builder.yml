@@ -1,0 +1,54 @@
+appId: com.easycolor.studio
+productName: EasyColor
+copyright: EasyColor
+
+directories:
+  output: release
+  buildResources: build
+
+# The renderer is the web build; the main process is the compiled TypeScript.
+files:
+  - dist/**/*
+  - package.json
+
+extraResources:
+  - from: ../web/dist
+    to: ../web/dist
+    filter:
+      - '**/*'
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  artifactName: EasyColor-${version}-${arch}.${ext}
+  # File associations, so double-clicking a saved grade opens it.
+  fileAssociations:
+    - ext: ecgrade
+      name: EasyColor grade
+      description: EasyColor colour grade
+      role: Editor
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: EasyColor
+  # Leaving saved grades and preferences behind on uninstall is the polite
+  # default; people reinstall far more often than they truly remove.
+  deleteAppDataOnUninstall: false
+
+portable:
+  artifactName: EasyColor-${version}-portable.${ext}
+
+mac:
+  target: [dmg]
+  category: public.app-category.video
+
+linux:
+  target: [AppImage]
+  category: Video

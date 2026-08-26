@@ -141,8 +141,12 @@ float ecWindowMask(int i, vec2 uv) {
   vec4 w1 = uWin1[i];
   int shape = (flags >> 2) & 3;
 
-  // Work in aspect-corrected space so an "ellipse" is actually round and
-  // rotation behaves the way the on-screen gizmo shows it.
+  // Work in aspect-corrected space, measured in units of frame height, so
+  // the shape is isotropic: equal radii really are a circle on any aspect
+  // ratio, the feather is the same width on every edge, and rotation moves
+  // the shape the way the on-screen gizmo shows it. Normalising the two
+  // radii to different axes — x to width, y to height — is the obvious
+  // alternative and it silently turns every circle into an oval.
   vec2 p = uv - w0.xy;
   p.x *= uAspect;
 
@@ -151,7 +155,7 @@ float ecWindowMask(int i, vec2 uv) {
   float sn = sin(rot);
   p = vec2(p.x * cs + p.y * sn, -p.x * sn + p.y * cs);
 
-  vec2 rr = max(vec2(w0.z * uAspect, w0.w), vec2(1e-4));
+  vec2 rr = max(w0.zw, vec2(1e-4));
   vec2 q = abs(p) / rr;
 
   float d;

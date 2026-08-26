@@ -20,6 +20,11 @@ import type { InspectorTab } from './components/Inspector.js';
 import { ScopesPanel } from './components/ScopesPanel.js';
 import type { ScopeKind } from './components/ScopesPanel.js';
 import { download, sanitise } from './components/panels/LutPanel.js';
+import { useDesktopMedia } from './hooks/useDesktopMedia.js';
+import { getDesktopBridge } from './desktop/bridge.js';
+import { Transport } from './components/Transport.js';
+import { LOG_TRANSFORM_BY_ID } from '@easycolor/core';
+import type { LogTransformId } from '@easycolor/core';
 
 const store = new GradeStore();
 
@@ -46,6 +51,35 @@ function Workspace() {
 
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const projectInputRef = useRef<HTMLInputElement>(null);
+  const bridge = getDesktopBridge();
+
+  /**
+   * When the desktop app recognises a camera's log curve from the file's
+   * metadata, set it — and say so. Applying a camera profile silently would
+   * leave someone wondering why their footage looks different from the last
+   * tool that opened it.
+   */
+  const desktop = useDesktopMedia(
+    renderer,
+    notify,
+    useCallback(
+      (id: string, info) => {
+        const transform = LOG_TRANSFORM_BY_ID[id as LogTransformId];
+        if (!transform) return;
+        store.update(
+          (g) => ({ ...g, source: { ...g.source, logTransform: id as LogTransformId, displayRender: 'filmic' } }),
+          `Camera profile: ${transform.label}`,
+        );
+        store.commit();
+        notify(
+          `${info.fileName} looks like ${transform.vendor} ${transform.label}. ` +
+            'Applied that camera profile — change it under Primary if it is wrong.',
+          'info',
+        );
+      },
+      [notify, store],
+    ),
+  );
 
   const toggleScopes = useCallback(() => setShowScopes((v) => !v), []);
   useShortcuts({ store, onToolChange: setTool, onToggleScopes: toggleScopes });
@@ -115,26 +149,49 @@ function Workspace() {
     );
   };
 
+  /**
+   * The viewer sizes itself from the media's dimensions. On desktop the
+   * pixels come from FFmpeg rather than a DOM element, so it is handed the
+   * dimensions with a null element — enough to lay out, nothing to upload.
+   */
+  const desktopMediaShim = desktop.info
+    ? {
+        kind: 'image' as const,
+        element: null,
+        width: desktop.info.width,
+        height: desktop.info.height,
+        name: desktop.info.fileName,
+        duration: desktop.info.durationSeconds,
+      }
+    : null;
+
+  const hasAnyMedia = desktop.info !== null || media.media.kind !== 'none';
+
   return (
     <div className={`app${showScopes ? '' : ' no-scopes'}`}>
       <div className="toolbar-area">
         <Toolbar
           tool={tool}
           onToolChange={setTool}
-          onOpenMedia={() => mediaInputRef.current?.click()}
+          onOpenMedia={() => {
+            // The desktop build opens through FFmpeg, so it can read camera
+            // formats a browser file picker could not decode anyway.
+            if (bridge) void desktop.open();
+            else mediaInputRef.current?.click();
+          }}
           onOpenProject={() => projectInputRef.current?.click()}
           onSaveProject={saveProject}
           showScopes={showScopes}
           onToggleScopes={toggleScopes}
           fps={renderer.fps}
-          mediaName={media.media.name}
+          mediaName={desktop.info?.fileName ?? media.media.name}
         />
       </div>
 
       <div className="viewer-area">
         <Viewer
           renderer={renderer}
-          media={media.media}
+          media={desktopMediaShim ?? media.media}
           tool={tool}
           selectedZoneId={selectedZoneId}
           onSelectZone={(id) => {
@@ -146,6 +203,13 @@ function Workspace() {
           onNotify={notify}
           onOpenFiles={(files) => void openFiles(files)}
         />
+        {desktop.info && (
+          <Transport
+            info={desktop.info}
+            currentTime={desktop.currentTime}
+            onSeek={(t) => void desktop.seek(t)}
+          />
+        )}
       </div>
 
       {showScopes && (
@@ -154,7 +218,7 @@ function Workspace() {
             renderer={renderer}
             active={scopes}
             onToggle={toggleScope}
-            hasMedia={media.media.kind !== 'none'}
+            hasMedia={hasAnyMedia}
           />
         </div>
       )}
@@ -164,12 +228,13 @@ function Workspace() {
           tab={tab}
           onTabChange={setTab}
           renderer={renderer}
-          hasMedia={media.media.kind !== 'none'}
+          hasMedia={hasAnyMedia}
           selectedZoneId={selectedZoneId}
           onSelectZone={setSelectedZoneId}
           selectedWindowId={selectedWindowId}
           onSelectWindow={setSelectedWindowId}
           onNotify={notify}
+          desktopMedia={desktop.info}
           onPickSkin={() => {
             setTool('picker');
             notify('Click a face in the viewer to set the skin qualifier.', 'info');

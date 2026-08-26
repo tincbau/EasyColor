@@ -77,8 +77,12 @@ export function WindowGizmos({ selectedWindowId, onSelectWindow, containerRef }:
     const drag = dragRef.current;
     if (!drag) return;
 
-    const du = (e.clientX - drag.startX) / drag.rect.width;
-    const dv = (e.clientY - drag.startY) / drag.rect.height;
+    // Position is normalised per axis; radii are normalised to height on
+    // both axes (see PowerWindow.rx), so the two need different divisors.
+    const moveU = (e.clientX - drag.startX) / drag.rect.width;
+    const moveV = (e.clientY - drag.startY) / drag.rect.height;
+    const sizeU = (e.clientX - drag.startX) / drag.rect.height;
+    const sizeV = (e.clientY - drag.startY) / drag.rect.height;
     const base = drag.baseline;
 
     store.update(
@@ -89,15 +93,15 @@ export function WindowGizmos({ selectedWindowId, onSelectWindow, containerRef }:
         const next = { ...base };
         switch (drag.kind) {
           case 'move':
-            next.cx = clamp(base.cx + du, -0.5, 1.5);
-            next.cy = clamp(base.cy + dv, -0.5, 1.5);
+            next.cx = clamp(base.cx + moveU, -0.5, 1.5);
+            next.cy = clamp(base.cy + moveV, -0.5, 1.5);
             break;
           case 'rx':
             // Resize about the centre, so a window stays where you put it.
-            next.rx = clamp(base.rx + rotateDelta(du, dv, base.rotation).x, 0.01, 2);
+            next.rx = clamp(base.rx + rotateDelta(sizeU, sizeV, base.rotation).x, 0.01, 3);
             break;
           case 'ry':
-            next.ry = clamp(base.ry + rotateDelta(du, dv, base.rotation).y, 0.01, 2);
+            next.ry = clamp(base.ry + rotateDelta(sizeU, sizeV, base.rotation).y, 0.01, 3);
             break;
           case 'rotate': {
             const angle = Math.atan2(
@@ -110,7 +114,7 @@ export function WindowGizmos({ selectedWindowId, onSelectWindow, containerRef }:
             break;
           }
           case 'softness':
-            next.softness = clamp(base.softness + dv * 1.6, 0.002, 1);
+            next.softness = clamp(base.softness + sizeV * 1.6, 0.002, 1);
             break;
         }
 
@@ -146,7 +150,8 @@ export function WindowGizmos({ selectedWindowId, onSelectWindow, containerRef }:
         const selected = w.id === selectedWindowId;
         const cx = w.cx * width;
         const cy = w.cy * height;
-        const rx = w.rx * width;
+        // Both radii scale by height, matching the shader's isotropic space.
+        const rx = w.rx * height;
         const ry = w.ry * height;
         const softRx = rx * (1 + w.softness);
         const softRy = ry * (1 + w.softness);

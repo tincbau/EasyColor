@@ -10,7 +10,10 @@ import { WindowsPanel } from './panels/WindowsPanel.js';
 import { LutPanel } from './panels/LutPanel.js';
 import { MatchPanel } from './panels/MatchPanel.js';
 import { HistoryPanel } from './panels/HistoryPanel.js';
+import { ExportPanel } from './panels/ExportPanel.js';
 import { useGradeSlice } from '../state/StoreContext.js';
+import { IS_DESKTOP } from '../desktop/bridge.js';
+import type { MediaInfo } from '@easycolor/core';
 
 export type InspectorTab =
   | 'primaries'
@@ -22,6 +25,7 @@ export type InspectorTab =
   | 'windows'
   | 'lut'
   | 'match'
+  | 'export'
   | 'history';
 
 const TABS: Array<{ id: InspectorTab; label: string }> = [
@@ -34,6 +38,10 @@ const TABS: Array<{ id: InspectorTab; label: string }> = [
   { id: 'windows', label: 'Windows' },
   { id: 'lut', label: 'LUT' },
   { id: 'match', label: 'Match' },
+  // Rendering a master needs a decoder and an encoder, so the tab only
+  // exists in the desktop build rather than appearing and then explaining
+  // that it cannot do anything.
+  ...(IS_DESKTOP ? [{ id: 'export' as const, label: 'Render' }] : []),
   { id: 'history', label: 'History' },
 ];
 
@@ -48,6 +56,7 @@ interface Props {
   onSelectWindow: (id: string | null) => void;
   onNotify: (message: string, kind?: 'info' | 'success' | 'error') => void;
   onPickSkin: () => void;
+  desktopMedia: MediaInfo | null;
 }
 
 export function Inspector(props: Props) {
@@ -95,6 +104,7 @@ function Panel({
   onSelectWindow,
   onNotify,
   onPickSkin,
+  desktopMedia,
 }: Props) {
   switch (tab) {
     case 'primaries':
@@ -128,6 +138,8 @@ function Panel({
       return <LutPanel renderer={renderer} onNotify={onNotify} />;
     case 'match':
       return <MatchPanel renderer={renderer} hasMedia={hasMedia} onNotify={onNotify} />;
+    case 'export':
+      return <ExportPanel renderer={renderer} mediaInfo={desktopMedia} onNotify={onNotify} />;
     case 'history':
       return <HistoryPanel />;
   }

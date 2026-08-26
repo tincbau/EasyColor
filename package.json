@@ -16,12 +16,14 @@
     "build": "npm run build:core && npm run build:web",
     "dev": "npm run dev -w @easycolor/web",
     "typecheck": "tsc -b packages/core packages/web",
-    "test": "node --test packages/core/test/*.test.mjs",
+    "test": "node --test packages/core/test/*.test.mjs packages/desktop/test/export.test.mjs",
     "desktop:dev": "npm run dev -w @easycolor/desktop",
     "desktop:dist": "npm run dist -w @easycolor/desktop",
     "premiere:pack": "npm run pack -w @easycolor/premiere",
     "test:browser": "npm run build:web && node packages/web/test/smoke.mjs",
-    "shots": "npm run build:web && node packages/web/test/screenshots.mjs"
+    "shots": "npm run build:web && node packages/web/test/screenshots.mjs",
+    "test:render": "npm run build -w @easycolor/desktop --if-present && node --test packages/desktop/test/render.integration.test.mjs",
+    "build:desktop": "npm run build:main -w @easycolor/desktop"
   },
   "engines": {
     "node": ">=20"

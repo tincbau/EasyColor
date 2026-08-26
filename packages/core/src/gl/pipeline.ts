@@ -58,6 +58,20 @@ export interface RendererOptions {
   processScale?: number;
 }
 
+export interface BakeLutOptions {
+  /**
+   * Include power windows in the bake.
+   *
+   * Off by default, and for the viewer's own "export LUT" that is correct: a
+   * window is positional and a cube only knows colour. The exporter switches
+   * it on for a different purpose — it bakes one cube per window with that
+   * window's shape widened to cover the frame, then reapplies the real shape
+   * as a mask outside the LUT. That reproduces a window exactly rather than
+   * dropping it.
+   */
+  includeWindows?: boolean;
+}
+
 export interface SampledPixel {
   /** Colour before any zone or window edit — the stable identity of a subject. */
   base: [number, number, number];
@@ -732,8 +746,9 @@ export class GradeRenderer {
    * windows depend on where a pixel is, and a 3D LUT only knows what colour
    * it is. The UI says so before exporting.
    */
-  bakeLut(grade: GradeState, size = 33): Float32Array {
+  bakeLut(grade: GradeState, size = 33, options: BakeLutOptions = {}): Float32Array {
     const gl = this.gl;
+    const includeWindows = options.includeWindows ?? false;
 
     const savedSourceW = this.sourceWidth;
     const savedSourceH = this.sourceHeight;
@@ -792,7 +807,7 @@ export class GradeRenderer {
       // Qualify against the unblurred lattice: the Hald has no spatial
       // structure, so a blur here would only smear unrelated colours together.
       this.baseRT = bakeBase;
-      this.renderZones(grade, bakeBase, /* includeWindows */ false, bakeOut);
+      this.renderZones(grade, bakeBase, includeWindows, bakeOut);
 
       gl.bindFramebuffer(gl.FRAMEBUFFER, bakeOut.framebuffer);
       const pixels = this.readRegion(0, 0, width, height);
