@@ -23,7 +23,10 @@
     "test:browser": "npm run build:web && node packages/web/test/smoke.mjs",
     "shots": "npm run build:web && node packages/web/test/screenshots.mjs",
     "test:render": "npm run build -w @easycolor/desktop --if-present && node --test packages/desktop/test/render.integration.test.mjs",
-    "build:desktop": "npm run build:main -w @easycolor/desktop"
+    "build:desktop": "npm run build:main -w @easycolor/desktop",
+    "premiere:build": "cross-env EASYCOLOR_BASE=./ npm run build -w @easycolor/web && node packages/premiere/scripts/pack.mjs",
+    "premiere:install": "node packages/premiere/scripts/install.mjs",
+    "test:premiere": "node packages/premiere/test/panel.smoke.mjs"
   },
   "engines": {
     "node": ">=20"

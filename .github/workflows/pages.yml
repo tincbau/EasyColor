@@ -1,0 +1,65 @@
+name: Deploy web app to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Pages deployment needs these; nothing else in the workflow writes to the repo.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# A queued deploy should wait for the running one rather than cancel it —
+# cancelling mid-deploy can leave the site serving a half-published build.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build the engine
+        run: npm run build:core
+
+      - name: Test
+        run: npm test
+
+      - name: Build the web app
+        # GitHub Pages serves a project site from /<repo>/, so the bundle has
+        # to be built with that base or every asset 404s.
+        run: npm run build:web
+        env:
+          EASYCOLOR_BASE: /${{ github.event.repository.name }}/
+
+      - name: Add a 404 fallback
+        # The app is a single page; Pages has no rewrite rules, so a copy of
+        # index.html at 404.html makes deep links work.
+        run: cp packages/web/dist/index.html packages/web/dist/404.html
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: packages/web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

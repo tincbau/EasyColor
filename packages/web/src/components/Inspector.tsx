@@ -11,9 +11,11 @@ import { LutPanel } from './panels/LutPanel.js';
 import { MatchPanel } from './panels/MatchPanel.js';
 import { HistoryPanel } from './panels/HistoryPanel.js';
 import { ExportPanel } from './panels/ExportPanel.js';
+import { PremierePanel } from './panels/PremierePanel.js';
 import { useGradeSlice } from '../state/StoreContext.js';
 import { IS_DESKTOP } from '../desktop/bridge.js';
-import type { MediaInfo } from '@easycolor/core';
+import { IS_PREMIERE } from '../desktop/premiere.js';
+import type { MediaInfo, PremiereFrame } from '@easycolor/core';
 
 export type InspectorTab =
   | 'primaries'
@@ -26,6 +28,7 @@ export type InspectorTab =
   | 'lut'
   | 'match'
   | 'export'
+  | 'premiere'
   | 'history';
 
 const TABS: Array<{ id: InspectorTab; label: string }> = [
@@ -42,6 +45,7 @@ const TABS: Array<{ id: InspectorTab; label: string }> = [
   // exists in the desktop build rather than appearing and then explaining
   // that it cannot do anything.
   ...(IS_DESKTOP ? [{ id: 'export' as const, label: 'Render' }] : []),
+  ...(IS_PREMIERE ? [{ id: 'premiere' as const, label: 'Premiere' }] : []),
   { id: 'history', label: 'History' },
 ];
 
@@ -57,6 +61,7 @@ interface Props {
   onNotify: (message: string, kind?: 'info' | 'success' | 'error') => void;
   onPickSkin: () => void;
   desktopMedia: MediaInfo | null;
+  onPremiereFrame: (frame: PremiereFrame) => void;
 }
 
 export function Inspector(props: Props) {
@@ -105,6 +110,7 @@ function Panel({
   onNotify,
   onPickSkin,
   desktopMedia,
+  onPremiereFrame,
 }: Props) {
   switch (tab) {
     case 'primaries':
@@ -140,6 +146,10 @@ function Panel({
       return <MatchPanel renderer={renderer} hasMedia={hasMedia} onNotify={onNotify} />;
     case 'export':
       return <ExportPanel renderer={renderer} mediaInfo={desktopMedia} onNotify={onNotify} />;
+    case 'premiere':
+      return (
+        <PremierePanel renderer={renderer} onNotify={onNotify} onFrameGrabbed={onPremiereFrame} />
+      );
     case 'history':
       return <HistoryPanel />;
   }

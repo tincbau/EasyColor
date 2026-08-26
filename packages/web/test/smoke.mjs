@@ -53,7 +53,9 @@ const PORT = 4178;
 const server = await serve(PORT);
 
 const browser = await chromium.launch({
-  executablePath: process.env.EASYCOLOR_CHROME ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  // Fall back to whatever Playwright installed. The explicit path is for
+  // sandboxes that ship a browser outside Playwright's own cache.
+  executablePath: process.env.EASYCOLOR_CHROME || undefined,
   args: [
     // Headless Chromium needs to be told to provide a GL implementation;
     // SwiftShader is software but it is a real WebGL2 driver, which is what

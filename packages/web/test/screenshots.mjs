@@ -31,7 +31,9 @@ const server = createServer(async (req, res) => {
 await new Promise((r) => server.listen(4179, r));
 
 const browser = await chromium.launch({
-  executablePath: process.env.EASYCOLOR_CHROME ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  // Fall back to whatever Playwright installed. The explicit path is for
+  // sandboxes that ship a browser outside Playwright's own cache.
+  executablePath: process.env.EASYCOLOR_CHROME || undefined,
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'],
 });
 const page = await browser.newPage({ viewport: { width: 1600, height: 950 }, deviceScaleFactor: 1 });

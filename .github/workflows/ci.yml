@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build the engine
+        run: npm run build:core
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build the web app
+        run: npm run build:web
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser tests
+        # The grading pipeline is WebGL2, so a headless browser with a real
+        # GL driver is the only way to know the shaders compile at all.
+        run: node packages/web/test/smoke.mjs
+
+      - name: Premiere panel tests
+        run: npm run premiere:build && npm run test:premiere
+
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Render tests
+        run: npm run build:desktop && node --test packages/desktop/test/render.integration.test.mjs

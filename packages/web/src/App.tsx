@@ -235,6 +235,11 @@ function Workspace() {
           onSelectWindow={setSelectedWindowId}
           onNotify={notify}
           desktopMedia={desktop.info}
+          onPremiereFrame={(frame) => {
+            // The exported still is an ordinary PNG on disk, so it loads
+            // through exactly the same path as a dropped file.
+            void media.loadUrl(frame.url, frame.path);
+          }}
           onPickSkin={() => {
             setTool('picker');
             notify('Click a face in the viewer to set the skin qualifier.', 'info');
