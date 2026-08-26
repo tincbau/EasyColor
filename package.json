@@ -29,7 +29,8 @@
     "test:premiere": "node packages/premiere/test/panel.smoke.mjs",
     "pretest": "npm run build:core && npm run build:desktop",
     "pretest:render": "npm run build:core && npm run build:desktop",
-    "pretest:browser": "npm run build:core"
+    "pretest:browser": "npm run build:core",
+    "publish:site": "bash scripts/publish-site.sh"
   },
   "engines": {
     "node": ">=20"
