@@ -83,6 +83,12 @@ export function useMedia(onError: (message: string) => void): MediaApi {
             video.load();
           });
 
+          // Start playing. Muted autoplay is always permitted, and a clip
+          // that opens moving tells the user immediately that video works.
+          // If the browser refuses anyway, the paused first frame still
+          // renders — the render path must never depend on playback.
+          await video.play().catch(() => {});
+
           setMedia({
             kind: 'video',
             element: video,

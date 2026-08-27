@@ -52,6 +52,32 @@ function check(name, condition, detail = '') {
 const PORT = 4178;
 const server = await serve(PORT);
 
+/* ---- a deterministic test clip ----
+   Red for its first second, blue for its second, as VP8 WebM — the one
+   family of codecs an open-source Chromium build is guaranteed to decode.
+   Solid colours, so every video assertion has an unambiguous pixel. */
+import { execFileSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { writeFileSync, readFileSync, rmSync } from 'node:fs';
+
+let clipBase64 = null;
+try {
+  const clipPath = join(tmpdir(), `easycolor-clip-${Date.now()}.webm`);
+  execFileSync('ffmpeg', [
+    '-hide_banner', '-loglevel', 'error', '-y',
+    '-f', 'lavfi', '-i', 'color=c=0xC03020:s=320x180:d=1:r=12',
+    '-f', 'lavfi', '-i', 'color=c=0x2040C0:s=320x180:d=1:r=12',
+    '-filter_complex', '[0][1]concat=n=2',
+    '-c:v', 'libvpx', '-b:v', '1M',
+    clipPath,
+  ]);
+  clipBase64 = readFileSync(clipPath).toString('base64');
+  rmSync(clipPath, { force: true });
+} catch {
+  // FFmpeg missing: the video checks below fail loudly rather than skip,
+  // because a silently skipped check is how NO VIDEO OUTPUT ships twice.
+}
+
 const browser = await chromium.launch({
   // Fall back to whatever Playwright installed. The explicit path is for
   // sandboxes that ship a browser outside Playwright's own cache.
@@ -345,6 +371,64 @@ await page.waitForTimeout(400);
 const filmed = await pixelAt(0.08, 0.25);
 check('selecting a film stock changes the image', filmed.join() !== redAfter.join(),
   `rgb(${filmed})`);
+
+/* ---- video ----
+   The still-image checks above cannot catch a broken video path: a video
+   frame reaches the GPU through a different route (playback and seek
+   events, not a one-shot upload), and that route once shipped never
+   uploading anything at all. */
+
+check('a test clip could be generated (ffmpeg present)', clipBase64 !== null);
+
+if (clipBase64 !== null) {
+  await page.evaluate(async (b64) => {
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const file = new File([bytes], 'clip.webm', { type: 'video/webm' });
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    const input = document.querySelector('input[type=file][accept*="image"]');
+    Object.defineProperty(input, 'files', { value: transfer.files, configurable: true });
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }, clipBase64);
+
+  await page.waitForSelector('.transport', { timeout: 8000 });
+  await page.waitForTimeout(600);
+
+  const early = await pixelAt(0.5, 0.5);
+  check('a video renders without any user action', early[0] > 100 && early[2] < 90,
+    `first-second red reads rgb(${early})`);
+
+  check('the video transport appears', (await page.locator('.transport').count()) === 1);
+
+  // Pause, and prove the frame freezes rather than going black or stale.
+  await page.click('.transport button[aria-label=Pause]');
+  await page.waitForTimeout(200);
+  const pausedA = await pixelAt(0.5, 0.5);
+  await page.waitForTimeout(400);
+  const pausedB = await pixelAt(0.5, 0.5);
+  // The clip loops, so which second the pause lands in is timing luck —
+  // the assertion is that the frame holds and is a real frame, not black.
+  check('pausing holds the current frame',
+    pausedA.join() === pausedB.join() && Math.max(...pausedA) > 60,
+    `rgb(${pausedA}) then rgb(${pausedB})`);
+
+  // Scrub into the blue second while paused: the seeked frame must upload.
+  const track = await page.locator('.transport-track').boundingBox();
+  await page.mouse.click(track.x + track.width * 0.8, track.y + track.height / 2);
+  await page.waitForTimeout(500);
+  const scrubbed = await pixelAt(0.5, 0.5);
+  check('scrubbing while paused shows the new frame', scrubbed[2] > 100 && scrubbed[0] < 90,
+    `second-second blue reads rgb(${scrubbed})`);
+
+  // Grade the paused frame: the whole point of pausing. The click may land
+  // in a zone the image section already created for this hue — reuse is the
+  // designed behaviour and is asserted up there — so the check here is only
+  // that the drag changed the paused frame.
+  await dragOnViewer(0.5, 0.5, 0.3, 0);
+  const graded = await pixelAt(0.5, 0.5);
+  check('grading works on a paused video frame', graded.join() !== scrubbed.join(),
+    `rgb(${scrubbed}) -> rgb(${graded})`);
+}
 
 /* ---- no runtime errors anywhere ---- */
 

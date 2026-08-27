@@ -112,7 +112,15 @@ textarea {
 }
 
 .toolbar-area { grid-area: toolbar; }
-.viewer-area  { grid-area: viewer; min-height: 0; min-width: 0; }
+.viewer-area  {
+  grid-area: viewer;
+  min-height: 0;
+  min-width: 0;
+  /* The transport bar is absolutely positioned to this pane's bottom edge.
+     Without a positioned ancestor it resolves against the page instead and
+     lands underneath the scopes, where their canvases swallow its clicks. */
+  position: relative;
+}
 .scopes-area  { grid-area: scopes; height: var(--scopes-height); min-width: 0; }
 .inspector-area { grid-area: inspector; min-height: 0; overflow: hidden; }
 

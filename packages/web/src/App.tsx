@@ -23,6 +23,7 @@ import { sanitise, saveTextFile } from './lib/download.js';
 import { useDesktopMedia } from './hooks/useDesktopMedia.js';
 import { getDesktopBridge } from './desktop/bridge.js';
 import { Transport } from './components/Transport.js';
+import { VideoTransport } from './components/VideoTransport.js';
 import { LOG_TRANSFORM_BY_ID } from '@easycolor/core';
 import type { LogTransformId } from '@easycolor/core';
 
@@ -214,6 +215,9 @@ function Workspace() {
             currentTime={desktop.currentTime}
             onSeek={(t) => void desktop.seek(t)}
           />
+        )}
+        {!desktop.info && media.media.kind === 'video' && media.media.element && (
+          <VideoTransport video={media.media.element as HTMLVideoElement} />
         )}
       </div>
 

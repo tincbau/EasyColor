@@ -77,6 +77,38 @@ export function useRenderer(store: GradeStore, media: MediaSource): RendererApi 
       renderer.setSource(media.element);
       lastSourceRef.current = media.element;
       dirtyRef.current = true;
+      return;
+    }
+
+    if (media.kind === 'video') {
+      const video = media.element as HTMLVideoElement;
+
+      // Upload the current frame regardless of playback state. The render
+      // loop only re-uploads while the video is *advancing*, so without
+      // this a paused video — which is what a video is the moment it
+      // loads, and what it is for most of a grading session — never
+      // reaches the GPU at all and the viewer stays black.
+      const uploadFrame = () => {
+        if (video.readyState >= 2) {
+          renderer.setSource(video);
+          dirtyRef.current = true;
+        }
+      };
+
+      uploadFrame();
+      lastSourceRef.current = video;
+
+      // Seeking while paused produces a new frame with no play event; the
+      // pause itself must show the frame it stopped on, not the one from
+      // half a second before the click.
+      video.addEventListener('seeked', uploadFrame);
+      video.addEventListener('loadeddata', uploadFrame);
+      video.addEventListener('pause', uploadFrame);
+      return () => {
+        video.removeEventListener('seeked', uploadFrame);
+        video.removeEventListener('loadeddata', uploadFrame);
+        video.removeEventListener('pause', uploadFrame);
+      };
     }
   }, [media.element, media.kind, ready]);
 
