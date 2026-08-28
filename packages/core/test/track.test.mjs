@@ -152,6 +152,70 @@ test('a brief occlusion coasts; a long one is lost', () => {
   assert.equal(back.state, 'tracking');
 });
 
+/* ---- plausibility: the difference between tracking and smearing ---- */
+
+test('a frame filled with skin tone yields no face, not a frame-sized window', () => {
+  // The shipped failure: on real footage the qualifier accepted a warm
+  // wall, the fit wrapped the whole frame, and the window became a
+  // gradient smeared across the image. The only right answer to "everything
+  // is skin-coloured" is "then I cannot see a face".
+  const wall = frame(320, 180, [{ cx: 160, cy: 90, rx: 400, ry: 400 }]);
+  assert.equal(detectFace(wall, SKIN), null);
+});
+
+test('a large warm background loses to the face on plausibility', () => {
+  // A skin-toned band across the lower 60% of frame (sand, wood panelling)
+  // and a face on the neutral part above it. The band has far more mass —
+  // it must be rejected by the gates, not chosen and smeared.
+  const f = frame(320, 180, [
+    { cx: 160, cy: 160, rx: 380, ry: 75 },           // the "sand"
+    { cx: 200, cy: 40, rx: 20, ry: 26 },             // the face
+  ]);
+  const face = detectFace(f, SKIN);
+  assert.ok(face, 'the face should be found despite the background');
+  assert.ok(Math.abs(face.cx - 200 / 320) < 0.05, `cx ${face.cx.toFixed(3)}`);
+  assert.ok(Math.abs(face.cy - 40 / 180) < 0.06, `cy ${face.cy.toFixed(3)}`);
+  assert.ok(face.ry < 0.5, `implausibly large: ry ${face.ry.toFixed(2)}`);
+});
+
+test('warm speckle is eroded away rather than fitted', () => {
+  const blobs = [{ cx: 100, cy: 90, rx: 22, ry: 30 }];
+  // A field of single-cell warm dots — noise, foliage highlights, bokeh.
+  for (let i = 0; i < 300; i++) {
+    blobs.push({ cx: (i * 37) % 320, cy: 20 + ((i * 53) % 140), rx: 1, ry: 1 });
+  }
+  const face = detectFace(frame(320, 180, blobs), SKIN);
+  assert.ok(face, 'the face should survive the clutter');
+  assert.ok(Math.abs(face.cx - 100 / 320) < 0.05, `cx ${face.cx.toFixed(3)}`);
+});
+
+test('an arm-like stripe is skipped for the face even when it has more mass', () => {
+  const f = frame(320, 180, [
+    { cx: 160, cy: 150, rx: 150, ry: 7 },            // the arm
+    { cx: 80, cy: 60, rx: 20, ry: 27 },              // the face
+  ]);
+  const face = detectFace(f, SKIN);
+  assert.ok(face);
+  assert.ok(Math.abs(face.cx - 80 / 320) < 0.05,
+    `should pick the face, landed at cx ${face.cx.toFixed(3)}`);
+});
+
+test('the tracker reports lost on an all-skin frame instead of tracking a smear', () => {
+  const tracker = new FaceTracker({ graceFrames: 2 });
+  const wall = frame(320, 180, [{ cx: 160, cy: 90, rx: 400, ry: 400 }]);
+  let last = null;
+  for (let i = 0; i < 4; i++) last = tracker.update(wall, SKIN);
+  assert.equal(last.state, 'lost');
+  assert.equal(last.ellipse, null);
+});
+
+test('a tracked fit can never exceed the window size ceiling', () => {
+  const moved = applyTrackToWindow(createWindow('w', 'ellipse'), {
+    cx: 0.5, cy: 0.5, rx: 2.4, ry: 1.9, rotation: 0, confidence: 1,
+  });
+  assert.ok(moved.rx <= 0.8 && moved.ry <= 0.8, `rx ${moved.rx} ry ${moved.ry}`);
+});
+
 test('applyTrackToWindow moves only geometry, never the correction', () => {
   const window = { ...createWindow('w', 'ellipse'), exposure: 0.8, saturation: 1.3, label: 'Face' };
   const moved = applyTrackToWindow(window, {

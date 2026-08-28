@@ -64,6 +64,29 @@ export interface DetectOptions {
 }
 
 /**
+ * Plausibility gates — the difference between a tracker and a smear.
+ *
+ * On real footage the qualifier accepts more than faces: wood, sand, walls,
+ * hair. Without gates, all of it merges into one sprawling component, the
+ * moment fit wraps a frame-sized ellipse around it, and the window becomes
+ * a gradient smeared across the whole image. Every candidate fit has to
+ * *look like a face region* before it is allowed to drive anything:
+ *
+ * - not too large — an ellipse covering a third of the frame is a wall;
+ * - not too elongated — a 10:1 blob is an arm or a strip of panelling;
+ * - dense — a face fills its own fitted ellipse, while a straggle of
+ *   background warm tones bridged together does not.
+ *
+ * A fit that fails is skipped in favour of the next candidate, and when no
+ * candidate passes the answer is honestly "no face", which the tracker
+ * turns into searching — never into applying the implausible thing.
+ */
+const MAX_AREA_FRACTION = 0.28;
+const MAX_MAJOR_FRACTION = 0.95;
+const MAX_ASPECT = 8;
+const MIN_FILL_RATIO = 0.3;
+
+/**
  * Detect the best face-candidate ellipse in one frame.
  * Returns null when nothing passes the mass threshold.
  */
@@ -73,7 +96,7 @@ export function detectFace(
   options: DetectOptions = {},
 ): FaceEllipse | null {
   const stride = Math.max(1, options.stride ?? 1);
-  const threshold = options.threshold ?? 0.25;
+  const threshold = options.threshold ?? 0.45;
   const minMass = options.minMass ?? 60;
   const padding = options.padding ?? 1.45;
 
@@ -99,6 +122,28 @@ export function detectFace(
     }
   }
 
+  /* ---- 1b. one erosion pass ----
+     Kills isolated speckle and, more importantly, the one-cell bridges
+     through which a face merges with a warm background into a single
+     sprawling component. The weights themselves are kept — erosion only
+     decides membership. */
+
+  const eroded = new Float32Array(gw * gh);
+  for (let gy = 1; gy < gh - 1; gy++) {
+    for (let gx = 1; gx < gw - 1; gx++) {
+      const p = gy * gw + gx;
+      if (
+        weights[p] > 0 &&
+        weights[p - 1] > 0 &&
+        weights[p + 1] > 0 &&
+        weights[p - gw] > 0 &&
+        weights[p + gw] > 0
+      ) {
+        eroded[p] = weights[p];
+      }
+    }
+  }
+
   /* ---- 2. connected components (4-neighbour flood fill) ---- */
 
   const labels = new Int32Array(gw * gh).fill(-1);
@@ -110,8 +155,8 @@ export function detectFace(
   const components: Component[] = [];
   const stack: number[] = [];
 
-  for (let seed = 0; seed < weights.length; seed++) {
-    if (weights[seed] === 0 || labels[seed] !== -1) continue;
+  for (let seed = 0; seed < eroded.length; seed++) {
+    if (eroded[seed] === 0 || labels[seed] !== -1) continue;
 
     const label = components.length;
     const component: Component = { mass: 0, sx: 0, sy: 0 };
@@ -123,7 +168,7 @@ export function detectFace(
 
     while (stack.length > 0) {
       const p = stack.pop()!;
-      const w = weights[p];
+      const w = eroded[p];
       const px = p % gw;
       const py = (p / gw) | 0;
 
@@ -131,86 +176,99 @@ export function detectFace(
       component.sx += w * px;
       component.sy += w * py;
 
-      if (px > 0 && weights[p - 1] > 0 && labels[p - 1] === -1) { labels[p - 1] = label; stack.push(p - 1); }
-      if (px < gw - 1 && weights[p + 1] > 0 && labels[p + 1] === -1) { labels[p + 1] = label; stack.push(p + 1); }
-      if (py > 0 && weights[p - gw] > 0 && labels[p - gw] === -1) { labels[p - gw] = label; stack.push(p - gw); }
-      if (py < gh - 1 && weights[p + gw] > 0 && labels[p + gw] === -1) { labels[p + gw] = label; stack.push(p + gw); }
+      if (px > 0 && eroded[p - 1] > 0 && labels[p - 1] === -1) { labels[p - 1] = label; stack.push(p - 1); }
+      if (px < gw - 1 && eroded[p + 1] > 0 && labels[p + 1] === -1) { labels[p + 1] = label; stack.push(p + 1); }
+      if (py > 0 && eroded[p - gw] > 0 && labels[p - gw] === -1) { labels[p - gw] = label; stack.push(p - gw); }
+      if (py < gh - 1 && eroded[p + gw] > 0 && labels[p + gw] === -1) { labels[p + gw] = label; stack.push(p + gw); }
     }
   }
 
   if (components.length === 0) return null;
 
-  /* ---- 3. choose a component ---- */
+  /* ---- 3. rank the candidates ---- */
 
   let totalMass = 0;
   for (const c of components) totalMass += c.mass;
 
-  let bestIndex = -1;
-  let bestScore = -Infinity;
-  for (let i = 0; i < components.length; i++) {
-    const c = components[i];
-    if (c.mass < minMass) continue;
+  const ranked = components
+    .map((c, index) => {
+      if (c.mass < minMass) return null;
+      let score = c.mass;
+      if (options.near) {
+        // Continuity beats size: a component near the previous track is
+        // worth several times its mass, so a hand entering frame has to be
+        // much larger than the face before it can steal the window.
+        const ccx = c.sx / c.mass / gw;
+        const ccy = c.sy / c.mass / gh;
+        const d = Math.hypot(ccx - options.near.cx, ccy - options.near.cy);
+        score *= 1 + 4 * Math.max(0, 1 - d / 0.35);
+      }
+      return { index, score, component: c };
+    })
+    .filter((c): c is NonNullable<typeof c> => c !== null)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5);
 
-    let score = c.mass;
-    if (options.near) {
-      // Continuity beats size: a component near the previous track is worth
-      // several times its mass, so a hand entering frame has to be much
-      // larger than the face before it can steal the window.
-      const cx = c.sx / c.mass / gw;
-      const cy = c.sy / c.mass / gh;
-      const d = Math.hypot(cx - options.near.cx, cy - options.near.cy);
-      score *= 1 + 4 * Math.max(0, 1 - d / 0.35);
+  /* ---- 4. fit candidates in order; the first plausible one wins ---- */
+
+  for (const candidate of ranked) {
+    const chosen = candidate.component;
+    const bestIndex = candidate.index;
+    const mcx = chosen.sx / chosen.mass;
+    const mcy = chosen.sy / chosen.mass;
+
+    let cxx = 0;
+    let cyy = 0;
+    let cxy = 0;
+    for (let p = 0; p < eroded.length; p++) {
+      if (labels[p] !== bestIndex) continue;
+      const w = eroded[p];
+      const dx = (p % gw) - mcx;
+      const dy = ((p / gw) | 0) - mcy;
+      cxx += w * dx * dx;
+      cyy += w * dy * dy;
+      cxy += w * dx * dy;
     }
-    if (score > bestScore) {
-      bestScore = score;
-      bestIndex = i;
-    }
+    cxx /= chosen.mass;
+    cyy /= chosen.mass;
+    cxy /= chosen.mass;
+
+    // Eigen-decomposition of the 2x2 covariance, closed form.
+    const mean = (cxx + cyy) / 2;
+    const diff = (cxx - cyy) / 2;
+    const spread = Math.hypot(diff, cxy);
+    const l1 = Math.max(mean + spread, 1e-6);
+    const l2 = Math.max(mean - spread, 1e-6);
+    const angle = (0.5 * Math.atan2(2 * cxy, cxx - cyy) * 180) / Math.PI;
+
+    // Semi-axes in grid cells: exact for a uniform ellipse (a = 2√λ).
+    const a1 = 2 * Math.sqrt(l1);
+    const a2 = 2 * Math.sqrt(l2);
+
+    /* ---- the plausibility gates ---- */
+
+    if (Math.PI * a1 * a2 > MAX_AREA_FRACTION * gw * gh) continue;
+    if (2 * a1 > MAX_MAJOR_FRACTION * gh && 2 * a1 > MAX_MAJOR_FRACTION * gw) continue;
+    if (a1 / a2 > MAX_ASPECT) continue;
+    // A face fills its fitted ellipse; a straggle of bridged background
+    // does not. Mass is Σweight over member cells, so mass over ellipse
+    // area is exactly the fill ratio.
+    if (chosen.mass / (Math.PI * a1 * a2) < MIN_FILL_RATIO) continue;
+
+    const major = a1 * padding;
+    const minor = a2 * padding;
+
+    return {
+      cx: (mcx * stride + stride / 2) / width,
+      cy: (mcy * stride + stride / 2) / height,
+      rx: (major * stride) / height,
+      ry: (minor * stride) / height,
+      rotation: angle,
+      confidence: totalMass > 0 ? chosen.mass / totalMass : 0,
+    };
   }
-  if (bestIndex < 0) return null;
 
-  /* ---- 4. moment fit over the chosen component ---- */
-
-  const chosen = components[bestIndex];
-  const mcx = chosen.sx / chosen.mass;
-  const mcy = chosen.sy / chosen.mass;
-
-  let cxx = 0;
-  let cyy = 0;
-  let cxy = 0;
-  for (let p = 0; p < weights.length; p++) {
-    if (labels[p] !== bestIndex) continue;
-    const w = weights[p];
-    const dx = (p % gw) - mcx;
-    const dy = ((p / gw) | 0) - mcy;
-    cxx += w * dx * dx;
-    cyy += w * dy * dy;
-    cxy += w * dx * dy;
-  }
-  cxx /= chosen.mass;
-  cyy /= chosen.mass;
-  cxy /= chosen.mass;
-
-  // Eigen-decomposition of the 2x2 covariance, closed form.
-  const mean = (cxx + cyy) / 2;
-  const diff = (cxx - cyy) / 2;
-  const spread = Math.hypot(diff, cxy);
-  const l1 = Math.max(mean + spread, 1e-6);
-  const l2 = Math.max(mean - spread, 1e-6);
-  const angle = (0.5 * Math.atan2(2 * cxy, cxx - cyy) * 180) / Math.PI;
-
-  // Semi-axes: exact for a uniform ellipse (a = 2√λ), padded for the parts
-  // of a face the qualifier never selects — hair, brows, shadowed edges.
-  const major = 2 * Math.sqrt(l1) * padding;
-  const minor = 2 * Math.sqrt(l2) * padding;
-
-  return {
-    cx: (mcx * stride + stride / 2) / width,
-    cy: (mcy * stride + stride / 2) / height,
-    rx: (major * stride) / height,
-    ry: (minor * stride) / height,
-    rotation: angle,
-    confidence: totalMass > 0 ? chosen.mass / totalMass : 0,
-  };
+  return null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -302,8 +360,12 @@ export function applyTrackToWindow(window: PowerWindow, ellipse: FaceEllipse): P
     ...window,
     cx: ellipse.cx,
     cy: ellipse.cy,
-    rx: Math.min(3, Math.max(0.02, ellipse.rx)),
-    ry: Math.min(3, Math.max(0.02, ellipse.ry)),
+    // 0.8 of frame height as the ceiling, not the geometry-legal 3: the
+    // detection gates should never let anything that large through, but a
+    // window driven by a tracker must be incapable of becoming a full-frame
+    // gradient even if they somehow do.
+    rx: Math.min(0.8, Math.max(0.02, ellipse.rx)),
+    ry: Math.min(0.8, Math.max(0.02, ellipse.ry)),
     rotation: ellipse.rotation,
   };
 }

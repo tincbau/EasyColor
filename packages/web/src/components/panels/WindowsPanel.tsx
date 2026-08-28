@@ -117,7 +117,7 @@ export function WindowsPanel({
               ? 'Tracking — the window is following the face.'
               : trackingState === 'coasting'
                 ? 'Briefly lost sight of the face; holding the last position.'
-                : 'Searching for a face…'}
+                : 'Searching… nothing in frame reads as a face yet. Pick skin on the face to tune what it looks for.'}
           </p>
         )}
         <p className="hint">
