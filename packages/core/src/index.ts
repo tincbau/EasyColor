@@ -17,6 +17,7 @@ export * from './lut/cube.js';
 export * from './export/plan.js';
 export * from './desktop/contract.js';
 export * from './premiere/contract.js';
+export * from './track/faceTrack.js';
 
 export * from './gl/pipeline.js';
 export * from './gl/glutil.js';

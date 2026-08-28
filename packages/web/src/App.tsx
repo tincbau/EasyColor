@@ -12,6 +12,7 @@ import { useMedia } from './hooks/useMedia.js';
 import { useRenderer } from './hooks/useRenderer.js';
 import { useToasts } from './hooks/useToasts.js';
 import { useShortcuts } from './hooks/useShortcuts.js';
+import { useFaceTracking } from './hooks/useFaceTracking.js';
 import { Toolbar } from './components/Toolbar.js';
 import type { ViewerTool } from './components/Toolbar.js';
 import { Viewer } from './components/Viewer.js';
@@ -47,6 +48,7 @@ function Workspace() {
   const [tab, setTab] = useState<InspectorTab>('primaries');
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   const [selectedWindowId, setSelectedWindowId] = useState<string | null>(null);
+  const [trackedWindowId, setTrackedWindowId] = useState<string | null>(null);
   const [showScopes, setShowScopes] = useState(true);
   const [scopes, setScopes] = useState<ScopeKind[]>(['waveform', 'parade', 'vectorscope']);
 
@@ -83,6 +85,13 @@ function Workspace() {
   );
 
   const toggleScopes = useCallback(() => setShowScopes((v) => !v), []);
+
+  const tracking = useFaceTracking({
+    renderer,
+    store,
+    windowId: trackedWindowId,
+    onWindowGone: useCallback(() => setTrackedWindowId(null), []),
+  });
 
   const mediaElement = media.media.kind === 'video' ? media.media.element : null;
   const togglePlayback = useCallback((): boolean => {
@@ -259,6 +268,9 @@ function Workspace() {
           onSelectWindow={setSelectedWindowId}
           onNotify={notify}
           desktopMedia={desktop.info}
+          trackedWindowId={trackedWindowId}
+          onTrackWindow={setTrackedWindowId}
+          trackingState={tracking.state}
           onPremiereFrame={(frame) => {
             // The exported still is an ordinary PNG on disk, so it loads
             // through exactly the same path as a dropped file.

@@ -709,7 +709,10 @@ export class GradeRenderer {
    * reading back a 4K frame every refresh would stall the GPU pipeline hard
    * enough to halve the viewer's frame rate.
    */
-  grabScopeFrame(maxWidth = 480): { data: Uint8Array; width: number; height: number } {
+  grabScopeFrame(
+    maxWidth = 480,
+    source: 'graded' | 'base' = 'graded',
+  ): { data: Uint8Array; width: number; height: number } {
     const gl = this.gl;
     const aspect = this.renderHeight / Math.max(1, this.renderWidth);
     const w = Math.max(1, Math.min(maxWidth, this.renderWidth));
@@ -719,7 +722,13 @@ export class GradeRenderer {
     this.scopeRT.bind();
     gl.bindVertexArray(this.vao);
     this.blitProgram.use();
-    this.blitProgram.texture('uTex', 0, this.zonesRT.texture);
+    // 'base' reads the frame before zones and windows apply. The face
+    // tracker uses it, because tracking from the fully graded frame feeds a
+    // window's own correction back into the thing it is tracking — darken a
+    // face with the window and the tracker promptly loses the face it
+    // darkened.
+    const rt = source === 'base' ? this.baseRT : this.zonesRT;
+    this.blitProgram.texture('uTex', 0, rt.texture);
     // Scopes are statistical, so row order does not affect the result — but
     // the palette and skin tools also read this buffer and present swatches
     // back to the user, so it is kept upright.

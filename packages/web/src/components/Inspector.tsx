@@ -15,7 +15,7 @@ import { PremierePanel } from './panels/PremierePanel.js';
 import { useGradeSlice } from '../state/StoreContext.js';
 import { IS_DESKTOP } from '../desktop/bridge.js';
 import { IS_PREMIERE } from '../desktop/premiere.js';
-import type { MediaInfo, PremiereFrame } from '@easycolor/core';
+import type { MediaInfo, PremiereFrame, TrackState } from '@easycolor/core';
 
 export type InspectorTab =
   | 'primaries'
@@ -62,6 +62,9 @@ interface Props {
   onPickSkin: () => void;
   desktopMedia: MediaInfo | null;
   onPremiereFrame: (frame: PremiereFrame) => void;
+  trackedWindowId: string | null;
+  onTrackWindow: (id: string | null) => void;
+  trackingState: TrackState | null;
 }
 
 export function Inspector(props: Props) {
@@ -111,6 +114,9 @@ function Panel({
   onPickSkin,
   desktopMedia,
   onPremiereFrame,
+  trackedWindowId,
+  onTrackWindow,
+  trackingState,
 }: Props) {
   switch (tab) {
     case 'primaries':
@@ -138,6 +144,9 @@ function Panel({
           selectedWindowId={selectedWindowId}
           onSelectWindow={onSelectWindow}
           onNotify={onNotify}
+          trackedWindowId={trackedWindowId}
+          onTrackWindow={onTrackWindow}
+          trackingState={trackingState}
         />
       );
     case 'lut':

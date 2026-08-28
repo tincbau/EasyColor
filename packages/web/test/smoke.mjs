@@ -61,6 +61,7 @@ import { tmpdir } from 'node:os';
 import { writeFileSync, readFileSync, rmSync } from 'node:fs';
 
 let clipBase64 = null;
+let faceClipBase64 = null;
 try {
   const clipPath = join(tmpdir(), `easycolor-clip-${Date.now()}.webm`);
   execFileSync('ffmpeg', [
@@ -73,6 +74,25 @@ try {
   ]);
   clipBase64 = readFileSync(clipPath).toString('base64');
   rmSync(clipPath, { force: true });
+
+  // A second clip for the face tracker: a skin-toned box sweeping across a
+  // neutral ground. The motion has to come from `overlay`, whose x and y
+  // are evaluated per frame with `t` as time — drawbox looks like it should
+  // do this, but its `t` is the *thickness* parameter and its expressions
+  // are evaluated once at init, which quietly produces a clip with the box
+  // parked offscreen and nothing to track. That exact mistake shipped in
+  // this test's first version and cost a debugging session.
+  const facePath = join(tmpdir(), `easycolor-face-${Date.now()}.webm`);
+  execFileSync('ffmpeg', [
+    '-hide_banner', '-loglevel', 'error', '-y',
+    '-f', 'lavfi', '-i', 'color=c=0x404048:s=320x180:d=2:r=12',
+    '-f', 'lavfi', '-i', 'color=c=0xC88A70:s=64x80:d=2:r=12',
+    '-filter_complex', "[0][1]overlay=x='30+(main_w-130)*t/2':y=54",
+    '-c:v', 'libvpx', '-b:v', '1M',
+    facePath,
+  ]);
+  faceClipBase64 = readFileSync(facePath).toString('base64');
+  rmSync(facePath, { force: true });
 } catch {
   // FFmpeg missing: the video checks below fail loudly rather than skip,
   // because a silently skipped check is how NO VIDEO OUTPUT ships twice.
@@ -425,6 +445,64 @@ await page.keyboard.press('Escape');
 await page.keyboard.press('1');
 await page.waitForTimeout(200);
 
+/* ---- face tracking on a still ----
+   A skin-toned oval on a neutral ground, off-centre so a window that merely
+   defaults to the middle cannot pass. The check reads the window's position
+   from the on-screen gizmo SVG — the same geometry the user sees. */
+
+await page.evaluate(async () => {
+  const w = 640, h = 360;
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const x = c.getContext('2d');
+  x.fillStyle = '#404048'; x.fillRect(0, 0, w, h);
+  x.fillStyle = '#c88a70';
+  x.beginPath();
+  x.ellipse(w * 0.7, h * 0.35, 55, 75, 0, 0, Math.PI * 2);
+  x.fill();
+  const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
+  const t = new DataTransfer();
+  t.items.add(new File([blob], 'portrait.png', { type: 'image/png' }));
+  const input = document.querySelector('input[type=file][accept*="image"]');
+  Object.defineProperty(input, 'files', { value: t.files, configurable: true });
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+});
+await page.waitForTimeout(600);
+
+// Tune the qualifier from the face itself — the documented workflow.
+await page.keyboard.press('5');
+const stillBox = await page.locator('.viewer-surface').boundingBox();
+await page.mouse.click(stillBox.x + 0.7 * stillBox.width, stillBox.y + 0.35 * stillBox.height);
+await page.waitForTimeout(300);
+
+await page.click('button[role=tab]:has-text("Windows")');
+await page.click('button:has-text("Add tracked face window")');
+await page.waitForTimeout(900);
+
+check('the tracker reports that it is tracking',
+  (await page.locator('[data-tracking-state="tracking"]').count()) === 1,
+  await page.locator('[data-tracking-state]').getAttribute('data-tracking-state').catch(() => 'missing'));
+
+await page.keyboard.press('3'); // window tool, to show the gizmo
+await page.waitForTimeout(300);
+
+const gizmo = async () => {
+  const e = page.locator('ellipse[stroke="#4aa8ff"]').first();
+  return {
+    cx: Number(await e.getAttribute('cx')),
+    cy: Number(await e.getAttribute('cy')),
+    rx: Number(await e.getAttribute('rx')),
+  };
+};
+const surfaceBox = await page.locator('.viewer-surface').boundingBox();
+const g1 = await gizmo();
+check('the tracked window lands on the face',
+  Math.abs(g1.cx / surfaceBox.width - 0.7) < 0.08 &&
+    Math.abs(g1.cy / surfaceBox.height - 0.35) < 0.08 &&
+    g1.rx > 10,
+  `gizmo at (${(g1.cx / surfaceBox.width).toFixed(2)}, ${(g1.cy / surfaceBox.height).toFixed(2)}), expected (0.70, 0.35)`);
+
+await page.keyboard.press('1');
+
 /* ---- video ----
    The still-image checks above cannot catch a broken video path: a video
    frame reaches the GPU through a different route (playback and seek
@@ -495,6 +573,40 @@ if (clipBase64 !== null) {
   await page.keyboard.press(' ');
   await page.waitForTimeout(250);
   check('space pauses again', (await playState()) === 'Play');
+}
+
+/* ---- face tracking follows motion ----
+   The tracked window from the still section is still live. The two-tone
+   clip above had no skin in it, so the tracker has been lost for several
+   seconds — this section also proves it re-acquires. The moving clip is a
+   skin-toned box sweeping left to right; the gizmo must move with it. */
+
+if (faceClipBase64 !== null) {
+  await page.evaluate(async (b64) => {
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const file = new File([bytes], 'face.webm', { type: 'video/webm' });
+    const t = new DataTransfer();
+    t.items.add(file);
+    const input = document.querySelector('input[type=file][accept*="image"]');
+    Object.defineProperty(input, 'files', { value: t.files, configurable: true });
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }, faceClipBase64);
+  await page.waitForTimeout(800);
+
+  await page.keyboard.press('3');
+  await page.waitForTimeout(400);
+
+  const track1 = await gizmo();
+  await page.waitForTimeout(700);
+  const track2 = await gizmo();
+
+  check('the window re-acquires and follows the moving face',
+    Number.isFinite(track1.cx) && Math.abs(track2.cx - track1.cx) > 6,
+    `gizmo cx ${track1.cx.toFixed(0)} -> ${track2.cx.toFixed(0)}`);
+
+  await page.click('button[role=tab]:has-text("Windows")');
+  check('the tracker still reports its state while following',
+    (await page.locator('[data-tracking-state]').count()) === 1);
 }
 
 /* ---- no runtime errors anywhere ---- */

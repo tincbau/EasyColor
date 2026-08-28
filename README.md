@@ -122,6 +122,12 @@ picture at all.
   handles for position, size, rotation and softness. The gizmo draws both the
   hard edge and the feather extent, because edge softness is otherwise
   invisible until the correction is too strong to judge.
+- **Face tracking** — a power window that finds a face and follows it as it
+  moves. Classical machine vision built on the skin qualifier: a
+  skin-probability map, connected components, and a moment-based ellipse
+  fit with temporal smoothing. No model downloads, works offline, and
+  tuning the qualifier ("Pick skin") tunes the tracker. Honest limits: it
+  tracks the dominant skin region, so it wants one clear face.
 
 ### Scopes and comparison
 
@@ -167,7 +173,7 @@ Drop a still or a clip on the viewer and start clicking colours.
 
 ```bash
 npm run build          # engine + web app
-npm test               # 98 unit tests
+npm test               # 107 unit tests
 npm run test:browser   # 22 checks in headless Chromium
 ```
 

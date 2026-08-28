@@ -1,5 +1,5 @@
 import { MAX_POWER_WINDOWS, createWindow } from '@easycolor/core';
-import type { PowerWindow, WindowShape } from '@easycolor/core';
+import type { PowerWindow, TrackState, WindowShape } from '@easycolor/core';
 import { useGrade, useStore } from '../../state/StoreContext.js';
 import { Slider } from '../ui/Slider.js';
 import { Button, Checkbox, Section, fmt } from '../ui/controls.js';
@@ -8,6 +8,9 @@ interface Props {
   selectedWindowId: string | null;
   onSelectWindow: (id: string | null) => void;
   onNotify: (message: string, kind?: 'info' | 'success' | 'error') => void;
+  trackedWindowId: string | null;
+  onTrackWindow: (id: string | null) => void;
+  trackingState: TrackState | null;
 }
 
 /**
@@ -19,19 +22,43 @@ interface Props {
  * warmer rather than darker, the controls for that are already in front of
  * you.
  */
-export function WindowsPanel({ selectedWindowId, onSelectWindow, onNotify }: Props) {
+export function WindowsPanel({
+  selectedWindowId,
+  onSelectWindow,
+  onNotify,
+  trackedWindowId,
+  onTrackWindow,
+  trackingState,
+}: Props) {
   const store = useStore();
   const grade = useGrade();
 
-  const addWindow = (shape: WindowShape) => {
+  const addWindow = (shape: WindowShape): PowerWindow | null => {
     if (grade.windows.length >= MAX_POWER_WINDOWS) {
       onNotify(`Up to ${MAX_POWER_WINDOWS} power windows at once. Delete one to add another.`, 'error');
-      return;
+      return null;
     }
     const window = createWindow(`win-${Date.now().toString(36)}`, shape);
     store.update((g) => ({ ...g, windows: [...g.windows, window] }), `Add ${window.label}`);
     store.commit();
     onSelectWindow(window.id);
+    return window;
+  };
+
+  const addFaceWindow = () => {
+    const window = addWindow('ellipse');
+    if (!window) return;
+    store.update(
+      (g) => ({
+        ...g,
+        windows: g.windows.map((w) =>
+          w.id === window.id ? { ...w, label: 'Face', softness: 0.55 } : w,
+        ),
+      }),
+      'Add face window',
+    );
+    store.commit();
+    onTrackWindow(window.id);
   };
 
   const patch = (id: string, changes: Partial<PowerWindow>, label: string, merge: string | null) => {
@@ -49,6 +76,7 @@ export function WindowsPanel({ selectedWindowId, onSelectWindow, onNotify }: Pro
   };
 
   const remove = (id: string) => {
+    if (trackedWindowId === id) onTrackWindow(null);
     store.update((g) => ({ ...g, windows: g.windows.filter((w) => w.id !== id) }), 'Delete window');
     store.commit();
     if (selectedWindowId === id) onSelectWindow(null);
@@ -72,6 +100,38 @@ export function WindowsPanel({ selectedWindowId, onSelectWindow, onNotify }: Pro
           Switch to the <strong>Window</strong> tool to drag the handles on screen. The dashed
           outline shows how far the feather reaches.
         </p>
+      </Section>
+
+      <Section title="Face tracking">
+        <Button small onClick={addFaceWindow} disabled={trackedWindowId !== null}>
+          Add tracked face window
+        </Button>
+        {trackedWindowId !== null && (
+          <p
+            className={`hint${
+              trackingState === 'tracking' ? ' ok' : trackingState === 'lost' ? ' warn' : ''
+            }`}
+            data-tracking-state={trackingState ?? 'off'}
+          >
+            {trackingState === 'tracking'
+              ? 'Tracking — the window is following the face.'
+              : trackingState === 'coasting'
+                ? 'Briefly lost sight of the face; holding the last position.'
+                : 'Searching for a face…'}
+          </p>
+        )}
+        <p className="hint">
+          Finds the dominant skin-coloured region using the Skin panel's qualifier and fits the
+          window to it, following as it moves. This is classical machine vision, not a neural
+          detector: it works best with one clear face, and if it grabs the wrong thing — or
+          nothing — use <strong>Pick skin</strong> on the face first to tune what it looks for.
+        </p>
+        {trackedWindowId !== null && (
+          <p className="hint">
+            While tracking, the window's position, size and rotation belong to the tracker; your
+            correction inside it is untouched. Stop tracking to place it by hand.
+          </p>
+        )}
       </Section>
 
       <Section title={`Windows (${grade.windows.length}/${MAX_POWER_WINDOWS})`}>
@@ -231,6 +291,17 @@ export function WindowsPanel({ selectedWindowId, onSelectWindow, onNotify }: Pro
                       format={fmt.signed}
                       onChange={bind('tint', 'Window tint')}
                     />
+
+                    <div className="row" style={{ marginTop: 10 }}>
+                      <Button
+                        small
+                        variant="ghost"
+                        active={trackedWindowId === w.id}
+                        onClick={() => onTrackWindow(trackedWindowId === w.id ? null : w.id)}
+                      >
+                        {trackedWindowId === w.id ? 'Stop tracking face' : 'Track face'}
+                      </Button>
+                    </div>
 
                     <div className="row between" style={{ marginTop: 10 }}>
                       <Checkbox

@@ -164,8 +164,8 @@ regression-tested:
 
 | Suite | What it can prove |
 |---|---|
-| `npm test` — 98 unit tests | Curve solver, `.CUBE` parsing, colour transforms, the qualifier, history coalescing, project round-trips, scopes, palette matching, the skin solver, export planning, FFmpeg command construction. |
-| `npm run test:browser` — 22 checks | That the shaders compile and link at all, and that click-and-drag grading, zone independence, undo, bypass, scopes, LUT export, windows and film stocks work end to end. |
+| `npm test` — 107 unit tests | Curve solver, `.CUBE` parsing, colour transforms, the qualifier, history coalescing, project round-trips, scopes, palette matching, the skin solver, export planning, FFmpeg command construction. |
+| `npm run test:browser` — 37 checks | That the shaders compile and link at all, and that click-and-drag grading, zone independence, undo, bypass, scopes, LUT export, windows and film stocks work end to end. |
 | `npm run test:render` — 7 checks | That FFmpeg accepts the graph and the pixels come out changed in the direction the grade asked for. |
 | `npm run test:premiere` — 16 checks | That the packed panel loads, the CEP bridge is detected, and ExtendScript calls are well-formed. |
 
