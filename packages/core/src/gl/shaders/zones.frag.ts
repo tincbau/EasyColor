@@ -190,7 +190,6 @@ vec3 ecApplyWindow(int i, vec3 c, float mask) {
 }
 
 float ecSkinMatte(vec3 refLch) {
-  if (!uSkinActive) return 0.0;
   return ecQualify(
     refLch,
     uSkin0.x, uSkin0.y, uSkin0.z,
@@ -228,7 +227,14 @@ void main() {
 
   /* ---- skin ---- */
 
-  float skinW = ecSkinMatte(refLch) * uSkin0.w;
+  // The qualifier is evaluated whether or not corrections are enabled: the
+  // isolation overlay exists to help set the qualifier up, and a diagnostic
+  // that only works after you have committed to the correction is useless in
+  // the one moment it is for. Only the *edit* is gated on enabled — and the
+  // diagnostic ignores strength too, so turning the correction down does not
+  // also blind the view of what is selected.
+  float skinSelect = ecSkinMatte(refLch);
+  float skinW = uSkinActive ? skinSelect * uSkin0.w : 0.0;
   if (skinW > 0.0) {
     vec3 lch = ecOklabToLch(lab);
     lch.z = mod(lch.z + uSkin2.x, 360.0);
@@ -273,7 +279,7 @@ void main() {
      The overlay pass reads this. Keeping it in alpha avoids a second render
      target, which some integrated GPUs handle badly at 4K. */
   float matte = 0.0;
-  if (uMatteMode == 1) matte = skinW;
+  if (uMatteMode == 1) matte = skinSelect;
   else if (uMatteMode == 2) matte = matteSelected;
   else if (uMatteMode == 3) matte = matteWindow;
   else if (uMatteMode == 4) matte = matteAll;

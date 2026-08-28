@@ -161,6 +161,18 @@ test('bad project files fail with a readable message', () => {
   assert.throws(() => deserialiseProject('{"version":99}'), /different version/);
 });
 
+test('Reset look clears the film settings a stock auto-loaded', () => {
+  const g = defaultGrade();
+  g.film.stock = 'cinestill800t';
+  g.film.grain = { ...g.film.grain, enabled: true, amount: 0.42 };
+  g.film.halation = { ...g.film.halation, enabled: true, strength: 0.85 };
+
+  const reset = LOOK_PRESETS.find((p) => p.id === 'neutral').apply(g);
+  assert.equal(reset.film.stock, 'none');
+  assert.equal(reset.film.grain.enabled, false, 'grain must not survive a reset');
+  assert.equal(reset.film.halation.enabled, false, 'halation must not survive a reset');
+});
+
 test('every look preset returns a usable grade and leaves the input alone', () => {
   for (const preset of LOOK_PRESETS) {
     const before = defaultGrade();

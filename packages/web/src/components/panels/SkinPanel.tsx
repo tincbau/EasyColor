@@ -168,7 +168,8 @@ export function SkinPanel({ renderer, hasMedia, onNotify, onPickSkin }: Props) {
         </Button>
         <p className="hint">
           The overlay outlines the selection in place. It does not dim, blur or cover the picture —
-          you are still judging the actual image while you tune the qualifier.
+          you are still judging the actual image while you tune the qualifier. It works whether or
+          not corrections are enabled, so you can see the selection before committing to it.
         </p>
       </Section>
 

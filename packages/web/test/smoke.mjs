@@ -372,6 +372,59 @@ const filmed = await pixelAt(0.08, 0.25);
 check('selecting a film stock changes the image', filmed.join() !== redAfter.join(),
   `rgb(${filmed})`);
 
+/* ---- skin isolation overlay ----
+   The one requirement on this overlay is that it must not cost visibility:
+   no dimming, no blurring, no covering. And it must work with corrections
+   switched OFF — the diagnostic exists to help set the qualifier up, and it
+   once shipped gated on the very switch it was supposed to precede. */
+
+// Reset the creative grade first: the film stock selected above loads
+// animated grain, and grain reseeds on every redraw — a pixel-identity
+// check against a noise field measures the noise, not the overlay.
+await page.click('button[role=tab]:has-text("Primary")');
+await page.click('button:has-text("Reset look")');
+await page.waitForTimeout(300);
+
+await page.keyboard.press('Escape');
+await page.keyboard.press('5'); // pick-skin tool
+await page.mouse.click(box.x + 0.25 * box.width, box.y + 0.25 * box.height); // orange band
+await page.waitForTimeout(300);
+
+await page.click('button[role=tab]:has-text("Skin")');
+await page.waitForTimeout(200);
+// Disable corrections, so the check proves the overlay stands on its own.
+await page.locator('.panel .checkbox input').first().uncheck();
+await page.waitForTimeout(200);
+
+const untouched = await pixelAt(0.58, 0.25); // deep in the green band
+await page.click('button:has-text("Show isolation overlay")');
+await page.waitForTimeout(500);
+
+const overlayStats = await page.evaluate(() => {
+  const canvas = document.querySelector('.viewer canvas');
+  const copy = document.createElement('canvas');
+  copy.width = canvas.width;
+  copy.height = canvas.height;
+  copy.getContext('2d').drawImage(canvas, 0, 0);
+  const d = copy.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+  let cyan = 0;
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i] < 110 && d[i + 1] > 160 && d[i + 2] > 160) cyan++;
+  }
+  return { cyan };
+});
+check('the isolation overlay draws its contour with corrections disabled',
+  overlayStats.cyan > 40, `${overlayStats.cyan} contour pixels`);
+
+const withOverlay = await pixelAt(0.58, 0.25);
+check('the overlay does not dim or cover the picture',
+  withOverlay.join() === untouched.join(),
+  `rgb(${untouched}) with overlay rgb(${withOverlay})`);
+
+await page.keyboard.press('Escape');
+await page.keyboard.press('1');
+await page.waitForTimeout(200);
+
 /* ---- video ----
    The still-image checks above cannot catch a broken video path: a video
    frame reaches the GPU through a different route (playback and seek
@@ -428,6 +481,20 @@ if (clipBase64 !== null) {
   const graded = await pixelAt(0.5, 0.5);
   check('grading works on a paused video frame', graded.join() !== scrubbed.join(),
     `rgb(${scrubbed}) -> rgb(${graded})`);
+
+  /* The video element never enters the DOM, so playback state is read from
+     the transport button, which re-renders off the element's own events. */
+  const playState = () =>
+    page.locator('.transport button[aria-label=Play], .transport button[aria-label=Pause]')
+      .first().getAttribute('aria-label');
+
+  check('setup: the clip is paused after grading', (await playState()) === 'Play');
+  await page.keyboard.press(' ');
+  await page.waitForTimeout(250);
+  check('space starts playback', (await playState()) === 'Pause');
+  await page.keyboard.press(' ');
+  await page.waitForTimeout(250);
+  check('space pauses again', (await playState()) === 'Play');
 }
 
 /* ---- no runtime errors anywhere ---- */

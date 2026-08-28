@@ -83,7 +83,22 @@ function Workspace() {
   );
 
   const toggleScopes = useCallback(() => setShowScopes((v) => !v), []);
-  useShortcuts({ store, onToolChange: setTool, onToggleScopes: toggleScopes });
+
+  const mediaElement = media.media.kind === 'video' ? media.media.element : null;
+  const togglePlayback = useCallback((): boolean => {
+    const video = mediaElement as HTMLVideoElement | null;
+    if (!video) return false;
+    if (video.paused) void video.play().catch(() => {});
+    else video.pause();
+    return true;
+  }, [mediaElement]);
+
+  useShortcuts({
+    store,
+    onToolChange: setTool,
+    onToggleScopes: toggleScopes,
+    onTogglePlayback: togglePlayback,
+  });
 
   /**
    * One entry point for every file the app accepts, dispatched by extension.

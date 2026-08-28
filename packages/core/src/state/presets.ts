@@ -8,7 +8,7 @@
  */
 
 import type { GradeState } from './grade.js';
-import { cloneGrade } from './grade.js';
+import { cloneGrade, defaultGrade } from './grade.js';
 
 export interface LookPreset {
   id: string;
@@ -50,7 +50,11 @@ export const LOOK_PRESETS: LookPreset[] = [
         offset: { r: 0, g: 0, b: 0, luma: 0 },
       };
       fresh.zones = [];
-      fresh.film = { ...fresh.film, stock: 'none', density: 0 };
+      // Film resets wholesale, not just the stock. Picking a stock loads
+      // that stock's grain and halation, so clearing only `stock` leaves
+      // CineStill's bloom and grain running over a "reset" image — which
+      // does not read as reset to anyone looking at it.
+      fresh.film = defaultGrade().film;
       // Exposure and the camera conversion are deliberately carried over.
       fresh.primaries.exposure = base.primaries.exposure;
       fresh.source = base.source;

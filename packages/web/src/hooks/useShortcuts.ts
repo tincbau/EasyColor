@@ -17,9 +17,16 @@ interface Options {
   store: GradeStore;
   onToolChange: (tool: ViewerTool) => void;
   onToggleScopes: () => void;
+  /** Toggle clip playback. Returns false when there is nothing to play. */
+  onTogglePlayback?: () => boolean;
 }
 
-export function useShortcuts({ store, onToolChange, onToggleScopes }: Options): void {
+export function useShortcuts({
+  store,
+  onToolChange,
+  onToggleScopes,
+  onTogglePlayback,
+}: Options): void {
   useEffect(() => {
     let bypassHeld = false;
 
@@ -53,6 +60,19 @@ export function useShortcuts({ store, onToolChange, onToggleScopes }: Options): 
 
       // Modifier chords belong to the browser or the OS from here on.
       if (mod || e.altKey) return;
+
+      if (e.key === ' ') {
+        // The transport's own scrub track handles space when focused and
+        // calls preventDefault, so honouring defaultPrevented avoids a
+        // double toggle. A focused button is left alone entirely: space is
+        // how a keyboard user presses it, and stealing that to toggle
+        // playback would make every button in the app do two things.
+        if (e.defaultPrevented) return;
+        const el = document.activeElement as HTMLElement | null;
+        if (el && (el.tagName === 'BUTTON' || el.tagName === 'A' || el.tagName === 'SUMMARY')) return;
+        if (onTogglePlayback?.()) e.preventDefault();
+        return;
+      }
 
       const tool = TOOLS.find((t) => t.key === e.key);
       if (tool) {
@@ -118,5 +138,5 @@ export function useShortcuts({ store, onToolChange, onToggleScopes }: Options): 
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
     };
-  }, [store, onToolChange, onToggleScopes]);
+  }, [store, onToolChange, onToggleScopes, onTogglePlayback]);
 }
