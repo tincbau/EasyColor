@@ -1,6 +1,6 @@
 # 260907 Aegis Protocol - Design and Technical Plan
 
-**Status:** Revision 2, reviewed. Written 2026-09-07 for handoff to a Gemini-based coding agent.
+**Status:** Revision 3, reviewed. Written 2026-09-07 for handoff to a Gemini-based coding agent.
 **Audience:** The coding agent that will build the game, plus Christine as product owner.
 **Scope of this document:** Product design, game rules, balance, rendering architecture, the volumetric cloud system, the Nano Banana asset pipeline, verification, and a milestone plan. No code is written here; every code-shaped block is a specification, not an implementation.
 
@@ -11,7 +11,7 @@
 1. **Decisions vs. tunables.** Anything marked **DECISION** is fixed unless the product owner changes it. Anything in a *balance table* is a starting value and is expected to change during the tuning loop in Section 6. Tunables live in one config file (`src/config/balance.ts`), never scattered as literals.
 2. **Assumptions are labeled.** Every place the original brief left a gap, or this plan departs from it, the fill-in is marked **ASSUMPTION** or **DECISION** and collected again in Section 15. The product owner should confirm or override those.
 3. **Verification is part of the work.** Each milestone in Section 13 has acceptance tests. A milestone is not done until its tests run green and the "not verified" list is written down.
-4. **Unverified facts are flagged.** Library versions, model IDs and prices were checked on 2026-09-07 from a container that could open the npm registry and unpack three.js 0.185.1, but could not open the Guerrilla, Google AI, DeepMind or threejs.org pages. Anything marked *(unverified)* must be re-checked by the agent before it is relied on.
+4. **Unverified facts are flagged.** Library versions, model IDs and prices were checked on 2026-09-07 from a container that could open the npm registry, unpack three.js 0.185.1 and read the volumetric cloud example source from the r185 tag on GitHub, but could not open the Guerrilla, Google AI, DeepMind or threejs.org pages. Anything marked *(unverified)* must be re-checked by the agent before it is relied on.
 5. **Reading order for the agent:** Sections 2, 5, 7, 8, 9 are the build spec. Sections 6, 10, 12 are the quality loop. Section 13 is the schedule. Appendices hold schemas, pseudocode and the review log.
 
 ---
@@ -55,8 +55,8 @@ Device classes above are design targets, not tested hardware. See Section 12.4 f
 
 | Tier | Contents | Use |
 |---|---|---|
-| **Bare** | Flight, skirmishers, scrap, one turret type (Point Defense), light boarders, deck graph, core, deck-layer clouds without towers or reprojection, HTML HUD, endless mode with a score. | Proves the loop. Playable in about twelve agent-days. |
-| **Basic (recommended)** | Everything in Bare plus: Cryo Emitter, Artillery Battery, Lancer torpedo craft, heavy boarders, storm towers, temporal reprojection and depth-aware compositing, three quality tiers, audio, first-run hints, local high score, balance sim harness. | The game as described in the brief, in the stratosphere, shippable to GitHub Pages. |
+| **Bare** | Flight, Skirmishers, scrap, one turret type (Point Defense), light boarders, deck graph, core, deck-layer clouds with depth-aware compositing but without towers or reprojection, HTML HUD, endless mode with a score. | Proves the loop. Playable in about eighteen agent-days (M0–M3). |
+| **Basic (recommended)** | Everything in Bare plus: Cryo Emitter, Artillery Battery, Lancer torpedo craft, heavy boarders, storm towers, temporal reprojection, three quality tiers, audio, first-run hints, local high score, balance sim harness. | The game as described in the brief, in the stratosphere, shippable to GitHub Pages. |
 | **Bonus** | Cloud-cover mechanic (Section 5.11), lightning inside storm towers, weather escalation with threat, boss boarding craft, gamepad, PWA install, ship shadow on the cloud tops, 2017-style in-scatter and out-scatter ambient. | Only after Basic is green and balanced. |
 
 **ASSUMPTION:** Basic is the target. Section 13 is planned against it.
@@ -79,7 +79,7 @@ Device classes above are design targets, not tested hardware. See Section 12.4 f
 | Brief said | Plan says | Why |
 |---|---|---|
 | Scrolling starfield | Scrolling cloud deck 4 km below, storm towers rising past the corridor | The volumetric clouds are the visual identity |
-| Space fighters | Jet-turbine skirmishers with contrails; boarders are armored "harpoon" craft | Contrails and exhaust read clearly against cloud tops |
+| Space fighters | Jet-turbine Skirmishers with contrails; boarders are armored "harpoon" craft | Contrails and exhaust read clearly against cloud tops |
 | "Drift harmlessly into deep space" | Boarders that overshoot dive into the cloud deck and vanish | Same rule, better payoff shot |
 | Energy projectiles | Kept, styled as hot plasma bolts | Bright bolts read well against white clouds |
 
@@ -120,7 +120,7 @@ Sky zenith #0B1A3A, sky horizon #C9D8F0, sky below horizon (haze) #8FA3BF, cloud
 
 | Action | Touch | Desktop |
 |---|---|---|
-| Move cruiser | Drag anywhere on the lower 70% of the screen. Movement is relative: the ship moves by the finger's delta times a gain of 1.4, not to the finger's position, so the thumb never covers the ship. | WASD or arrow keys. Mouse movement also steers when the pointer is over the canvas. |
+| Move cruiser | Drag anywhere on the lower 70% of the screen. Movement is relative: the ship moves by the finger's delta in CSS pixels × 1.4 × (corridor width in fu ÷ playfield width in CSS pixels), not to the finger's position, so the thumb never covers the ship. | WASD or arrow keys. Mouse movement also steers when the pointer is over the canvas. |
 | Toggle Tactical Mode | Button bottom-right, 64 px hit area, or two-finger tap | Space or Tab |
 | Place turret | Tap an empty slot, tap a turret in the radial menu, tap again to confirm | Click slot, click type, click to confirm. Keys 1–3 select type. |
 | Inspect or dismantle | Tap an existing turret: shows range ring and a Dismantle button | Click turret; Delete key dismantles |
@@ -161,7 +161,7 @@ Rendering the HUD in the DOM keeps text crisp on any pixel density, keeps layout
 
 ## 5. Game rules specification
 
-All units: fu = flight unit (10 m), du = deck unit (one deck grid cell, 0.5 fu), s = seconds of simulation time. Simulation time is scaled by the mode's time scale; the HUD shows real time.
+All units: fu = flight unit (10 m), du = deck unit (one deck grid cell, 0.5 fu), s = seconds of simulation time. Simulation time is scaled by the mode's time scale; the HUD and death screen show real time. All survival times in Sections 6 and 13 are simulation seconds.
 
 ### 5.1 Corridor and cruiser
 - Corridor: x ∈ [−50, 50] fu, z ∈ [−35, 155] fu. Enemies spawn at z = 145. Objects are removed at z < −35 or |x| > 70.
@@ -172,22 +172,22 @@ All units: fu = flight unit (10 m), du = deck unit (one deck grid cell, 0.5 fu),
 
 **DECISION:** The simulation is 2.5D. Everything moves in the y = 2000 fu plane and collision is 2D (circles against the cruiser capsule). Boarders and scrap have visual altitude offsets for drama, never gameplay ones. This keeps the rules identical to the brief and makes the sim harness cheap.
 
-Collision radii (fu): plasma bolt 0.6, torpedo 1.0, artillery shell 0.8, skirmisher 2.5, Lancer 3.0, Grapple 3.0, Ram 4.5, scrap fragment 1.0.
+Collision radii (fu): plasma bolt 0.6, torpedo 1.0, artillery shell 0.8, Skirmisher 2.5, Lancer 3.0, Grapple 3.0, Ram 4.5, scrap fragment 1.0.
 
 ### 5.2 Autocannons
 Two forward barrels alternating, combined 10 rounds/s, 4 damage each, 160 fu/s, spread 1.5°, range to z = 155.
 
-**DECISION (auto-aim):** The guns aim themselves at the nearest target inside a ±20° cone ahead of the cruiser, with priority torpedo > skirmisher > Lancer > boarder when several are in the cone; with nothing in the cone they fire straight ahead. Boarders are **armored**: autocannon rounds do 40% damage to them. Killing a boarder in flight is therefore possible only when the corridor is otherwise clear, which is the reward for clearing it.
+**DECISION (auto-aim):** The guns aim themselves inside a ±20° cone ahead of the cruiser: pick the highest-priority class present in the cone (torpedo > Skirmisher > Lancer > boarder), then the nearest target of that class; with nothing in the cone they fire straight ahead. Boarders are **armored**: autocannon rounds do 40% damage to them. Killing a boarder in flight is therefore possible only when the corridor is otherwise clear, which is the reward for clearing it.
 
-Why: a fixed-forward gun would leave every balance number below undefined, and an unrestricted auto-aim would kill every boarder before contact (a Grapple at full damage dies in 1.2 s of fire, and it takes 3.2 s to arrive). With armor, an undisturbed Grapple needs 2.8 s of undivided fire and a Ram 6.9 s.
+Why: a fixed-forward gun would leave every balance number below undefined, and an unrestricted auto-aim would kill every boarder before contact (a Grapple at full damage dies in 1.1 s of fire, and it takes 3.2 s to arrive). With armor, an undisturbed Grapple needs 2.8 s of undivided fire and a Ram 6.9 s.
 
 ### 5.3 Enemies
 
 | Enemy | HP | Speed (fu/s) | Behavior | Attack | Hull damage on collision | Scrap drop |
 |---|---|---|---|---|---|---|
-| Skirmisher | 12 | 30 down the corridor | Spawns in formations of 4–8 (templates below), holds formation shape; the formation center weaves with amplitude 12 fu, period 2.5 s | Plasma bolt every 1.6 s per craft, aimed at the cruiser at fire time, 70 fu/s, 6 damage | 20; skirmisher destroyed, its scrap drops at the hull and is collected at once | 3 |
+| Skirmisher | 12 | 30 down the corridor | Spawns in formations of 4–8 (templates below), holds formation shape; the formation center weaves with amplitude 12 fu, period 2.5 s | Plasma bolt every 1.6 s per craft, aimed at the cruiser at fire time, 70 fu/s, 6 damage | 20; the Skirmisher is destroyed and its scrap drops at the hull, collected at once | 3 |
 | Lancer | 20 | 24 down to z ≈ 90, holds for 20 s strafing ±20 fu, then resumes descent at 24 fu/s | Spawns in pairs from threat level 2; at most 2 pairs alive; a new pair spawns only when fewer than 3 Lancers are alive | Torpedo every 4 s: 35 fu/s, weak homing (turn 20°/s), 18 damage, 6 HP so guns can kill it | 20 | 5 |
-| Grapple (light boarder) | 45 | 45, straight at the cruiser, turn rate 35°/s | Spawns alone at a random x, from threat level 0 | None. On hull contact: 8 hull damage, clamps to the matching breach point, deploys 2 waves × 4 Strike drones, then detaches and is removed | Boarding | 6 if killed in flight |
+| Grapple (light boarder) | 45 | 45, straight at the cruiser, turn rate 35°/s | Spawns alone at x uniform in [−40, 40], from threat level 0 | None. On hull contact: 8 hull damage, clamps to the matching breach point, deploys 2 waves × 4 Strike drones, then detaches and is removed | Boarding | 6 if killed in flight |
 | Ram (heavy boarder) | 110 | 28, turn rate 20°/s | From threat level 3 | On contact: 15 hull damage, clamps, deploys 3 waves × 5 Assault drones, then detaches and is removed | Boarding | 12 if killed in flight |
 
 **Formation templates:** V (up to 8, two wings), line (up to 6 abreast), column (up to 8 in file). Spacing 6 fu. The formation center spawns at x uniform in [−25, 25]. The first formation spawns at t = 3 s.
@@ -205,8 +205,9 @@ Why: a fixed-forward gun would leave every balance number below undefined, and a
 - The deck is a hand-authored graph in `assets/deck/aegis-deck.json` (schema in Appendix A) on a 12 × 32 cell grid at 0.5 fu per cell, matching the 6 × 16 fu hull. It has 5 breach points: bow, port-fore, port-aft, starboard-fore, starboard-aft. All paths lead to the core node at the stern.
 - **DECISION (no single chokepoint):** the core is fed by three distinct final edges, one from the bow route and one from each side, and no shared edge on the way to the core is longer than 3 du. No turret slot sits within 6 du of the core. One turret cannot cover every route; the deck needs at least three covered points, which is what makes the deck front cost scrap.
 - Path lengths: bow → core 40 du, fore flanks → core 28 du, aft flanks → core 18 du.
-- Breach matching: a boarder's impact point is the hull point nearest its center at contact, expressed as a fraction of hull length (0 = stern, 1 = bow) and a side. Bow breach: [0.85, 1.0]. Fore flanks: [0.55, 0.85]. Aft flanks: [0, 0.55]. Aft hits happen when a late sidestep lets a boarder clip the flank behind the midpoint.
+- Breach matching: a boarder's impact point is the hull point nearest its center at contact, expressed as a fraction of hull length (0 = stern, 1 = bow) and a side. Bow breach: [0.85, 1.0]. Fore flanks: [0.55, 0.85). Aft flanks: [0, 0.55). Aft hits happen when a late sidestep lets a boarder clip the flank behind the midpoint.
 - Breaches are not exclusive. At most 3 boarders may be clamped at once; a fourth deals its hull damage and is removed without boarding. Clamped boarders are invulnerable and do not collide. The first wave deploys 1.5 s after clamping; later waves follow at the craft's wave gap (Grapple 4 s, Ram 6 s). Drones in a wave spawn 0.5 du apart along the first edge from the breach. Detaching is cosmetic and does no damage.
+- **DECISION:** at most 3 clamped boarders at once (above).
 - 30 turret slots on bulkheads flanking the paths. Each slot has a `mount` tag: `center`, `flank-port` or `flank-starboard`, used by Artillery arcs.
 - Drones path along the graph by precomputed shortest path to the core (the graph is static, so Dijkstra runs once at load). They never retarget.
 
@@ -226,11 +227,11 @@ Why: a fixed-forward gun would leave every balance number below undefined, and a
 | Cryo Emitter | 35 | 17 | 6 du along the graph | 1 round / 5 s | 0 | Round lands instantly and detonates into a stasis field: radius 2.5 du along the graph, lasts 4 s, slows drones by 65%. Fields do not stack; the strongest applies. |
 | Artillery Battery | 60 | 30 | Flight corridor | 1 shell / 2.5 s | 24 in a 7 fu splash | Ignores the deck. Shell speed 70 fu/s. Arcs below. |
 
-**Point Defense targeting.** In drone mode it fires at the in-range drone closest to the core, with no reset. With no drone in range it enters torpedo mode: it picks the torpedo within 40 fu of the cruiser whose projected hull impact is earliest (the brief's "predictive tracking"), destroys it instantly, then resets for 1.5 s before the next intercept. The reset is per battery. A salvo of three torpedoes therefore needs three batteries or the autocannons' help.
+**Point Defense targeting.** In drone mode it fires at the in-range drone closest to the core, with no reset. With no drone in range it enters torpedo mode: it picks the torpedo within 40 fu of the cruiser whose projected hull impact is earliest (the brief's "predictive tracking"), destroys it instantly, then resets for 1.5 s before the next intercept. The reset is per battery and blocks torpedo intercepts only; a drone entering range during the reset is fired on at once. A salvo of three torpedoes therefore needs three batteries or the autocannons' help.
 
 **Cryo targeting.** Fires at the center of the largest drone cluster in range, and only when at least 2 drones are within 3 du of each other.
 
-**Artillery arcs and targeting. DECISION:** `center` mounts traverse ±15° around straight ahead; `flank-port` and `flank-starboard` mounts traverse from 15° to 60° outward on their side. This keeps the brief's mounting-based spread while giving each gun something to hit. Priority inside the arc: boarder > Lancer > skirmisher. Shells lead their target using shell speed and enemy velocity, damage every flight-space enemy in the splash including torpedoes, and never hit clamped boarders. A center gun kills a Skirmisher per direct hit and often clips 2–3 in a formation; flank guns are the answer to boarders and Lancers coming in wide.
+**Artillery arcs and targeting. DECISION:** `center` mounts traverse ±15° around straight ahead; `flank-port` and `flank-starboard` mounts traverse from 15° to 60° outward on their side. This keeps the brief's mounting-based spread while giving each gun something to hit. Priority inside the arc: boarder > Lancer > Skirmisher. Shells lead their target using shell speed and enemy velocity, damage every flight-space enemy in the splash including torpedoes, and never hit clamped boarders. A center gun kills a Skirmisher per direct hit and often clips 2–3 in a formation; flank guns are the answer to boarders and Lancers coming in wide.
 
 **Why these numbers:** one Point Defense sees a Strike wave (4 drones, 40 HP total, at 4 du/s crossing a 9 du diameter) for 2.25 s and can deal 67.5 damage, so it handles a light wave with a 1.7× margin. An Assault wave (5 drones, 160 HP, at 2.2 du/s) is in range for 4.1 s, worth 123 damage, so it needs a second battery or a Cryo field. A Cryo field slows drones for 4 s out of every 5 across 5 du of the battery's 9 du window, which in practice stretches exposure by about 1.7×, enough for one battery plus one emitter to beat one Assault wave. With three routes into the core, that arithmetic repeats three times. Layering is required by the numbers, not by hope.
 
@@ -252,7 +253,7 @@ Threat level L is a real number: `L = max(scrapCollected / 40, elapsedSimSeconds
 
 Formulas: formation interval `clamp(7 − 0.35 L, 2.5, 7)` (floor reached near L = 13); size `min(8, 4 + floor(L / 2))`; boarder interval `clamp(22 − 1.2 L, 6, 22)` (floor near L = 13); heavy share `clamp(0.05 L + 0.1, 0, 0.5)` applied from L ≥ 3 (25% at L = 3); Lancer pair interval `clamp(30 × 0.9^L, 8, 30)` from L ≥ 2. The unit test in Section 12.1 checks every table row against these formulas. Spawns use a seeded RNG (Section 7.4).
 
-**Pressure check at L = 8:** 8 skirmishers × 12 HP every 4.2 s is 23 HP/s of incoming health. Autocannons deliver 40 damage/s at 100% accuracy and about 28 at a realistic 70% with auto-aim. The player is barely ahead without Artillery, which is the intended moment Artillery earns its cost.
+**Pressure check at L = 8:** 8 Skirmishers × 12 HP every 4.2 s is 23 HP/s of incoming health. Autocannons deliver 40 damage/s at 100% accuracy and about 28 at a realistic 70% with auto-aim. The player is barely ahead without Artillery, which is the intended moment Artillery earns its cost.
 
 ### 5.9 Score
 **ASSUMPTION:** Score = scrap collected + 25 per boarder made to overshoot. Kills do not score, so scrap has no negative marginal value once the deck is built: every fragment is both progress and pressure. Best score and best time persist in `localStorage`.
@@ -261,7 +262,7 @@ Formulas: formation interval `clamp(7 − 0.35 L, 2.5, 7)` (floor reached near L
 Defeat when hull ≤ 0 (Structural Collapse) or core ≤ 0 (Core Breach). **ASSUMPTION:** Endless survival, no win state, no waves between which the game pauses.
 
 ### 5.11 Bonus mechanic: cloud cover (not in Basic)
-Flying the cruiser inside a storm tower breaks skirmisher line of sight (they hold fire) and slows scrap magnetism by half. Icing deals 1 hull per second after 3 s inside. This turns the volumetrics into a tactical resource. It is excluded from Basic because it complicates the sim bot and the readability rules.
+Flying the cruiser inside a storm tower breaks Skirmisher line of sight (they hold fire) and slows scrap magnetism by half. Icing deals 1 hull per second after 3 s inside. This turns the volumetrics into a tactical resource. It is excluded from Basic because it complicates the sim bot and the readability rules.
 
 ---
 
@@ -274,7 +275,7 @@ The agent has no hands to playtest with. Balance therefore runs as a **headless 
 1. Formation interval and size (incoming HP per second).
 2. Boarder interval and turn rate (boardings per minute and how dodgeable they are).
 3. Point Defense damage and range (deck lethality).
-4. Scrap per skirmisher (economy speed and therefore escalation speed).
+4. Scrap per Skirmisher (economy speed and therefore escalation speed).
 5. Tactical time scale (reaction window).
 6. Drone speeds (time-to-core).
 7. Artillery cost (when the flight front gets help).
@@ -292,7 +293,7 @@ The agent has no hands to playtest with. Balance therefore runs as a **headless 
 
 ### 6.4 Sim harness specification
 - Location: `sim/`. Imports `src/game/**` only; must not import anything from `src/render/**` or the DOM.
-- Bots: `dodger` (moves perpendicular to the nearest threat's velocity; steers toward scrap within 25 fu when no bolt is within 15 fu; enters Tactical on a boarding and builds Point Defense on the boarded route, then Cryo, then Artillery on a center mount), `greedy` (chases scrap, dodges only bolts within 15 fu), `builder` (enters Tactical on every boarding and builds by a fixed priority list), `idle` (control).
+- Bots: `dodger` (moves perpendicular to the nearest threat's velocity; steers toward scrap within 25 fu when no bolt is within 15 fu; enters Tactical on a boarding and builds the next affordable item from the build list, one turret per Tactical entry), `greedy` (chases scrap, dodges only bolts within 15 fu, builds like `dodger`), `builder` (enters Tactical on every boarding and builds two items per entry if affordable), `idle` (control). The build list, shared by all building bots: Point Defense on the boarded route, Point Defense on each of the other two routes, Cryo on the most-boarded route, Artillery on a center mount, Artillery on each flank.
 - Each run: seed, bot, config hash → survival time, cause of death, scrap collected, scrap spent, threat at death, per-minute damage sources, per-turret kills, boarders overshot.
 - Batch: 200 seeds per bot per config. Output JSON plus a Markdown summary table committed under `sim/reports/YYMMDD-<label>.md`.
 - Speed target: a 10-minute simulated run in under 0.5 s of wall time.
@@ -312,7 +313,7 @@ The agent has no hands to playtest with. Balance therefore runs as a **headless 
 | `greedy` median survival | 120–200 s | Greed should be punished, not fatal instantly |
 | `idle` median survival | 25–45 s | Doing nothing dies fast, but not before the first hint shows |
 | Death-cause split for `dodger` | 35–65% hull | Both fronts matter |
-| Scrap collected per minute for `dodger` at L 0–4 | 60–110 | One turret every 15–25 s early |
+| Scrap collected per minute for `dodger` at L 0–4 | 60–110 | One turret every 14–25 s early |
 | Boarders overshot per boarder for `dodger` | 55–75% | Dodging should be learnable but not free |
 
 These bands are hypotheses. After the first human playtest by the owner, re-anchor the `dodger` band to the owner's own median.
@@ -389,7 +390,7 @@ Plain arrays of typed structs per entity kind, dense, with swap-remove on death.
 `Boot → Loading → Title → Flight ⇄ Tactical → Death → Title`. Pause overlays Flight or Tactical without leaving the state.
 
 ### 7.7 Persistence
-`localStorage` keys: `aegis.best`, `aegis.settings` (quality tier, audio volume, hints seen). IndexedDB holds the generated noise textures (Section 9.3). No backend, no accounts, no analytics.
+`localStorage` keys: `aegis.best`, `aegis.settings` (quality tier, audio volume, hints seen). IndexedDB holds the generated noise textures (Section 9.3). **DECISION:** No backend, no accounts, no analytics; the game ships to GitHub Pages as a public static site.
 
 ### 7.8 Security and privacy invariants (do not regress)
 - No API key in the shipped bundle. Nano Banana runs only in `tools/` with a key from a local `.env` that is git-ignored.
@@ -405,7 +406,7 @@ Plain arrays of typed structs per entity kind, dense, with swap-remove on death.
 
 1. **Sim interpolation** writes transforms for ships, bolts, scrap, drones.
 2. **Opaque scene pass** to an offscreen target via `pass(scene, camera)`: cruiser, deck (in Tactical), enemies, scrap. The analytic sky is the scene's `backgroundNode`, so it lands in the same color target where depth is far. Depth is read later through the pass node (Section 8.5).
-3. **Cloud pass** at reduced resolution (Section 9.6), reading the opaque depth so towers correctly occlude and are occluded by ships. Outputs two targets: color and total transmittance, and a data target with cloud depth, transmittance to the flight plane, and the scene depth it used (Section 9.7).
+3. **Cloud pass** at reduced resolution (Section 9.6), reading the opaque depth so towers correctly occlude and are occluded by ships. Outputs two targets: RT0 with color and total transmittance, and RT1 with cloud depth, transmittance to the flight plane, and the scene depth it used (Section 9.7).
 4. **Temporal reprojection** of the cloud targets (Medium and High only).
 5. **Bilateral upsample** of the cloud targets to full resolution using the full-resolution scene depth against the scene depth each cloud sample used.
 6. **Composite**: `scene = clouds.rgb + scene.rgb × clouds.T_total`. Ships are opaque and write depth, so a ship above the deck stops the march and keeps `T_total = 1` on its pixels.
@@ -416,7 +417,7 @@ Plain arrays of typed structs per entity kind, dense, with swap-remove on death.
 ### 8.2 WebGPU versus WebGL 2: the decision gate
 **DECISION:** Build on `WebGPURenderer` with TSL. It runs on WebGPU where available and falls back to a WebGL 2 backend from the same shader source.
 
-What the 0.185.1 source already shows (checked by unpacking the package): `Loop`, `Break` and `Continue` nodes, `texture3D` sampling that compiles to `sampler3D` on the GLSL builder, `Data3DTexture` upload, depth textures, and render-target ping-pong all exist on both backends, and the official `webgpu_volume_cloud` example uses exactly `texture3D`, `Loop`, `Break` and `Data3DTexture`. The risk is therefore small, and the gate is a half-day check, not a two-day spike.
+What the 0.185.1 source already shows (checked by unpacking the npm package and reading the example from the r185 tag on GitHub): `Loop`, `Break` and `Continue` nodes, `texture3D` sampling that compiles to `sampler3D` on the GLSL builder, `Data3DTexture` upload, depth textures, and render-target ping-pong all exist on both backends, and the official `webgpu_volume_cloud` example uses exactly `texture3D`, `Loop`, `Break` and `Data3DTexture`. The risk is therefore small, and the gate is a half-day check, not a two-day spike.
 
 **Gate (Milestone 0):** prove on both backends, with `forceWebGL: true` for the second, that a TSL fragment node can (a) loop a variable number of times with early exit, (b) sample a 3D texture with trilinear filtering and explicit mip level, (c) read the scene depth through `pass().getTextureNode('depth')` and `getViewZNode()`, (d) ping-pong between two float render targets, and (e) report whether `generateMipmaps` works on a `Data3DTexture`. If (a)–(d) fail on WebGL 2 and cannot be fixed in one agent-day, **Plan B** is `WebGLRenderer` with GLSL `ShaderMaterial` for the cloud pass only. Record the result and the answer to (e) in `docs/DEV_LOG.md`.
 
@@ -432,7 +433,7 @@ Search results on 2026-09-07 report that Safari 26 on iOS 26 ships WebGPU by def
 
 Step counts are budgets; step lengths are derived from them (Section 9.6). Each tier is a separate compiled cloud material with its counts and tower flag baked in as constants, kept in a lazily built map so switching tiers does not recompile on the render thread more than once per tier.
 
-Tier selection: start at Medium; after 3 seconds of play, if the 95th-percentile frame time exceeds the target budget (33.3 ms at 30 fps for Low, 16.7 ms otherwise) drop one tier; if it sits under 60% of budget for 20 seconds, raise one tier, at most once per session. The first second after any tier change is excluded from the histogram, because the material swap causes a one-off hitch. Persist the result.
+Tier selection: start at the persisted tier, else Medium. Every 3 seconds, evaluate the 95th-percentile frame time over the last 3 seconds: if it exceeds the target budget (33.3 ms at 30 fps for Low, 16.7 ms otherwise) drop one tier; drops are unlimited. If it sits under 60% of budget for 20 seconds, raise one tier, at most one raise per session. The first second after any tier change is excluded from the histogram, because the material swap causes a one-off hitch. Persist the result.
 
 ### 8.4 Frame budget at Medium on mobile high (target 16.7 ms)
 
@@ -452,12 +453,12 @@ These are budgets to design against, not measurements. The cloud budget is the o
 - Scene depth for the cloud pass: `scenePass = pass(scene, camera)`; depth via `scenePass.getTextureNode('depth')`, view-space Z via `scenePass.getViewZNode()`. Ray end distance is `t_scene = −viewZ / dot(rayDir, cameraForward)`. Never hand-roll depth linearization: WebGPU uses [0, 1] clip depth and WebGL [−1, 1], and the three.js helpers branch on `renderer.coordinateSystem`.
 - Sky: `scene.backgroundNode` is a TSL function of `positionViewDirection` returning the gradient above the horizon and the haze token below it.
 - 3D textures: `Data3DTexture` defaults to nearest filtering and clamped `wrapR`. Set `minFilter = magFilter = LinearFilter`, `wrapS = wrapT = wrapR = RepeatWrapping`, `RGBAFormat`, `UnsignedByteType`, `needsUpdate = true`. Sample inside the march with an explicit level (`texture3D(tex, uvw).level(lod)`) because derivatives are undefined after a data-dependent break in a loop.
-- Float render targets on the WebGL 2 backend require `EXT_color_buffer_float`; check for it at boot and fall back to Low tier without reprojection if it is missing.
+- Float render targets on the WebGL 2 backend require `EXT_color_buffer_float`; check for it at boot. Without it, force Low tier and use the RGBA8 encodings in Section 9.7.
 
 ### 8.6 Ships and deck as procedural meshes
 Nano Banana makes images, not meshes, so ships are built in code from primitives (boxes, cylinders, lathe and extrude geometries) by factory functions in `src/render/ships/`. Each factory takes a seed and a palette and returns a single merged `BufferGeometry` with UVs laid out so the generated hull and panel textures tile sensibly. Enemies use `InstancedMesh` per type. The deck is one mesh: floor plane, bulkhead extrusions from the graph, breach hatches, core housing, with a cutaway roof that is simply not rendered.
 
-**Alternative, flagged:** CC0 kitbash packs (for example the Kenney space kits) would look better faster. *Not verified from this session and no URL is given for that reason.* Procedural is the default because it is deterministic and needs no downloads.
+**Alternative, flagged:** CC0 kitbash packs (for example the Kenney space kits) would look better faster. *Not verified from this session and no URL is given for that reason.* **DECISION:** Procedural is the default because it is deterministic and needs no downloads.
 
 ---
 
@@ -522,7 +523,7 @@ density(p, lod):
   return d * densityScale(isTower)
 ```
 
-`remap(v, l0, h0, l1, h1) = l1 + (v − l0) × (h1 − l1) / (h0 − l0)`, clamped to [l1, h1]. `weatherScale = 1 / weatherExtentFu`. Wetness does not touch density; it darkens in the light function. Wind: the deck scrolls toward −z at the apparent speed of the cruiser (a design constant of 12 fu/s, because the ship is not really moving in the sim) plus a slow lateral drift, both in simulation time. Towers scroll with the same offset so they pass the ship like landmarks; a tower footprint of 20–30 weather texels (320–480 fu) crosses the corridor in about 30 s.
+`remap(v, l0, h0, l1, h1) = l1 + (v − l0) × (h1 − l1) / (h0 − l0)`, clamped to [l1, h1]. `weatherScale = 1 / weatherExtentFu`. Wetness does not touch density; it darkens in the light function. Wind: the deck scrolls toward −z at the apparent speed of the cruiser (a design constant of 12 fu/s, because the ship is not really moving in the sim) plus a slow lateral drift, both in simulation time. Towers scroll with the same offset so they pass the ship like landmarks; a tower footprint of 20–30 weather texels (320–480 fu) takes 27–40 s to pass alongside the corridor. The 40% width rule in Section 4.5 is enforced by the weather-map post-processing step, which removes tower cells within 30 fu of the corridor center line; the cumulonimbus anvil is widest at flight altitude (height fraction 0.88), so the rule must hold at the map level, not by hoping.
 
 ### 9.5 Lighting (per sample with density > 0)
 
@@ -531,9 +532,9 @@ light(p, d, cosTheta, hf, wetness):
   // Cone of light samples toward the sun (2015). Five samples at t_i = i * lightStep
   // (i = 1..5, lightStep starts at 6 fu), each offset by blueNoiseDir_i * coneRadius * t_i
   // with coneRadius = 0.3, plus one far sample at t = 15 * lightStep with no offset.
-  // All six use COARSE density. Once the running sum passes 0.3, the remaining cone
-  // samples also use COARSE (the 2015 shortcut).
-  dl = Σ_{i=1..5} density(p + sunDir * t_i + cone_i, COARSE) * lightStep
+  // The five cone samples use FINE density until the running sum passes 0.3, then
+  // COARSE (the 2015 shortcut). The far sample is always COARSE.
+  dl = Σ_{i=1..5} density(p + sunDir * t_i + cone_i, lod_i) * lightStep
      + density(p + sunDir * 15 * lightStep, COARSE) * 10 * lightStep
   // Multiple-scattering octave approximation (Wrenninge 2013, as used in Nubis 2017):
   // contribution b scales each octave, attenuation a scales its optical depth,
@@ -551,7 +552,7 @@ light(p, d, cosTheta, hf, wetness):
 
 ### 9.6 Ray march
 - One ray per cloud-buffer pixel. Ray bounds: `t0 = 0` if the camera is inside the slab, else the distance to the slab top plane; `t1 = min(distance to the slab base plane, t_scene)`; discard the pixel if `t1 ≤ t0`. In Flight Mode the camera (2165 fu) is above the slab, so rays start at the top plane; in Tactical Mode the camera (about 2022 fu) is inside the tower slab and rays start at the camera. Tower density is faded to zero within 10 fu of the camera to avoid a full-screen wall on the mode blend.
-- Two ranges with **step budgets** from the tier table. Near range: from `t0` to `t0 + nearRangeFu` (700 fu), stepped uniformly with `nearStep = nearRangeFu / nearSteps`. Far range: from there to `farRangeFu` (2500 fu from the camera), stepped by a geometric series that reaches `farRangeFu` in `farSteps`. Beyond `farRangeFu` the color blends to the haze token. There are no other step-length literals; changing quality means changing the budgets.
+- Two ranges with **step budgets** from the tier table. Near range: from `t0` to `t0 + nearRangeFu` (700 fu), stepped uniformly with `nearStep = nearRangeFu / nearSteps`. Far range: from there to `farRangeFu` (2500 fu from the camera), stepped by a geometric series that reaches `farRangeFu` in `farSteps`. Beyond `farRangeFu` the color blends to the haze token. `nearSteps` and `farSteps` are maximum loop iterations; step length is derived as written, so an early break simply saves work. A range with a budget of 0 is skipped and everything beyond the previous range is haze. There are no other step-length literals; changing quality means changing the budgets.
 - Adaptive stepping (2015): march at 3× the range's step while sampling `COARSE` density; on the first non-zero sample, step back one coarse step and switch to fine stepping with full detail; after 8 consecutive zero fine samples, return to coarse.
 - Front-to-back integration, exact for constant lighting over a step at albedo 1:
 
@@ -572,14 +573,14 @@ cloudDepth = (1 - T) > 0.05 ? depthSum / (1 - T) : t1
 output RT0 = (C.rgb, T_total = T); RT1 = (cloudDepth, T_ship, usedSceneDepth, 0)
 ```
 
-- `T_ship` defaults to 1 and is set once when the march passes the flight plane; a ray that starts below the plane (never, in Flight) keeps 1.
+- `T_ship` defaults to 1 and is set once when the march passes the flight plane; a ray that starts below the plane (always the case at Low tier, where the slab top is 1600 fu) keeps 1.
 - Per-pixel blue-noise jitter of the first step length. At Medium and High it changes per frame so temporal accumulation converges; at Low it is fixed per pixel so the image is stable without history.
 
 ### 9.7 Temporal reprojection and upsampling
-- Render targets: RT0 is RGBA16F (color, total transmittance); RT1 is RGBA32F (cloud depth in fu, `T_ship`, the point-sampled scene depth this pixel used, unused).
+- Render targets: RT0 is RGBA16F (color, total transmittance); RT1 is RGBA32F (cloud depth in fu, `T_ship`, the point-sampled scene depth this pixel used, unused). When float targets are unavailable (Section 8.5), Low tier uses RGBA8 for both: RT0 holds tone-mapped color and transmittance, and RT1 packs the used scene depth as a 16-bit fixed-point fraction of `farRangeFu` in its first two channels and `T_ship` in the third; Low has no reprojection, so cloud depth is not needed.
 - At Medium and High only a Bayer-ordered subset of cloud pixels (1/4 or 1/16) is freshly marched each frame; the rest are reprojected from the previous frame's RT0/RT1 using the previous view-projection matrix and the previous **cloud depth**, never the scene depth (scene depth is the far plane on almost every cloud pixel, so it would only ever encode rotation, and the cruiser translates at 55 fu/s over a deck 400 fu below).
 - Reprojection validity: reject the history sample if it falls outside the previous frame, if the reprojected cloud depth differs from the freshly marched neighbor's by more than 5%, or during the first 4 frames of a mode camera blend. Rejected pixels fall back to the nearest freshly marched neighbor for that frame.
-- On the Flight ⇄ Tactical camera blend, force a 4-frame full refresh: every cloud pixel marched at half the tier's step budgets. That costs about 1.5 frames of cloud budget across the transition and happens rarely.
+- On the Flight ⇄ Tactical camera blend, force a 4-frame full refresh: the cloud buffer drops to quarter resolution and every pixel is marched at half the tier's step budgets, then reprojection resumes from that history upsampled. Per frame this costs about half the normal cloud budget at Medium and about twice it at High; a brief dip on the blend is acceptable, ghosting is not.
 - Upsampling to full resolution is bilateral: weights compare the full-resolution scene depth with the scene depth each low-res sample used (RT1's third channel), so cloud edges do not bleed onto ships.
 
 ### 9.8 Stratosphere-specific adaptations (not in the papers)
@@ -636,7 +637,7 @@ Every prompt is stored verbatim in the manifest. Nano Banana outputs carry an in
 - **Keying:** the background is never exactly #FF00FF. Flood-fill from the four corners with a Lab color distance tolerance (ΔE < 12), despill fringe pixels (`r = min(r, (g + b) / 2 + 0.05)`), then erode the alpha by 1 px.
 - **Seam score:** mean absolute difference between the last and first column (and row), divided by the mean absolute difference between adjacent interior columns; accept at or below 1.5.
 - **Offset-and-blend:** roll the image by (w/2, h/2), send it back through the model's edit mode with the prompt "remove the visible cross-shaped seam, keep everything else", and re-score; if it still fails, fall back to a 32 px feathered blend of the rolled image with the original.
-- **Normal map from height:** height is the Gaussian-blurred (1 px) luminance; the normal is the Sobel gradient of the height, `n = normalize(−∂h/∂x × k, −∂h/∂y × k, 1)` with `k = 4`, +Y up as three.js expects, stored as `n × 0.5 + 0.5` in RGB8.
+- **Normal map from height:** height is the Gaussian-blurred (1 px) luminance; the normal is the Sobel gradient of the height, `n = normalize(−∂h/∂x × k, −∂h/∂y × k, 1)` with `k = 4`, where `∂h/∂y` is taken with the row index increasing upward (flip the Sobel Y kernel) so +Y is up as three.js expects, stored as `n × 0.5 + 0.5` in RGB8.
 
 ### 10.6 Fallbacks
 If the API is unavailable or the key is missing, `tools/gen-assets.mts --procedural` writes placeholder textures (noise-based panels, flat icons) so the build never depends on the API. The game must look acceptable with placeholders; generated art is an upgrade, not a dependency.
@@ -686,18 +687,18 @@ Every milestone report ends with the untested items, in this shape: what was tes
 7. Owner-run performance and mobile verification, and the final balance pass.
 
 ### 13.2 Milestones and proposed dates
-Dates assume kickoff Monday 2026-09-08 and one agent working continuously with owner check-ins at each milestone. They are proposals for the owner to confirm.
+Dates assume kickoff Tuesday 2026-09-08 and one agent working continuously with owner check-ins at each milestone. They are proposals for the owner to confirm.
 
 | Milestone | Dates | Deliverable | Acceptance |
 |---|---|---|---|
-| M0 Gate | Sep 8 | Vite + TS + three.js scaffold; TSL ray march of a 3D noise sphere on WebGPU and WebGL 2; depth read through `pass()`; float target ping-pong; mipmap check | Gate items (a)–(e) answered on both backends, or Plan B chosen and logged |
-| M1 Core loop | Sep 9–13 | Cruiser, auto-aiming autocannons, skirmisher formations, scrap, hull damage, HUD, death screen, seeded RNG, camera coverage test | 60-second replay test passes; `idle` bot dies in 25–45 s |
-| M2 Deck | Sep 14–18 | Deck graph with the three-final-edge rule, breaches, Grapple boarders, Strike drones, Point Defense, Tactical Mode with time dilation and camera blend | Boarding → build → survive is playable with cubes |
-| M3 Clouds I | Sep 19–25 | Noise generation (compute and worker paths, IndexedDB cache), weather map, deck layer, lighting, adaptive march, exact integrator, cloud depth, compositing, sky with haze | Golden image on WebGL 2 in CI; energy sanity passes; noise generation time measured on the owner's phone |
-| M4 Clouds II + tiers | Sep 26–Oct 1 | Towers, reprojection, `T_ship` FX attenuation, bilateral upsample, three tiers, auto-tier | Reprojection sanity passes; owner-run desktop bench p95 under 12 ms at High |
-| M5 Full roster + balance | Oct 2–7 | Cryo, Artillery with traverse arcs, Lancer, Ram, Assault drones, escalation, sim harness, first tuning loop | All Section 6.6 bands hit or the misses are documented with a proposed lever |
-| M6 Art + audio | Oct 8–11 | Nano Banana pipeline, procedural ships textured, decals, icons, SFX, first-run hints, high score | Thumbnail sheet reviewed by owner; placeholders fully replaced or fallback documented |
-| M7 Ship | Oct 12–15 | Mobile verification round with owner, final balance pass, GitHub Pages deploy, `README`, `DEV_LOG` | Owner plays 3 runs on a phone; deploy URL verified loading |
+| M0 Gate | Sept. 8 | Vite + TS + three.js scaffold; TSL ray march of a 3D noise sphere on WebGPU and WebGL 2; depth read through `pass()`; float target ping-pong; mipmap check | Gate items (a)–(e) answered on both backends, or Plan B chosen and logged |
+| M1 Core loop | Sept. 9–13 | Cruiser, auto-aiming autocannons, Skirmisher formations, scrap, hull damage, HUD, death screen, seeded RNG, camera coverage test | 60-second replay test passes; `idle` bot dies in 25–45 s |
+| M2 Deck | Sept. 14–18 | Deck graph with the three-final-edge rule, breaches, Grapple boarders, Strike drones, Point Defense, Tactical Mode with time dilation and camera blend | Boarding → build → survive is playable with cubes |
+| M3 Clouds I | Sept. 19–25 | Noise generation (compute and worker paths, IndexedDB cache), weather map, deck layer, lighting, adaptive march, exact integrator, cloud depth, compositing, sky with haze | Golden image on WebGL 2 in CI; energy sanity passes; noise generation time measured on the owner's phone |
+| M4 Clouds II + tiers | Sept. 26–Oct. 1 | Towers, reprojection, `T_ship` FX attenuation, bilateral upsample, three tiers, auto-tier | Reprojection sanity passes; owner-run desktop bench p95 under 12 ms at High |
+| M5 Full roster + balance | Oct. 2–7 | Cryo, Artillery with traverse arcs, Lancer, Ram, Assault drones, escalation, sim harness, first tuning loop | All Section 6.6 bands hit or the misses are documented with a proposed lever |
+| M6 Art + audio | Oct. 8–11 | Nano Banana pipeline, procedural ships textured, decals, icons, SFX, first-run hints, high score | Thumbnail sheet reviewed by owner; placeholders fully replaced or fallback documented |
+| M7 Ship | Oct. 12–15 | Mobile verification round with owner, final balance pass, GitHub Pages deploy, `README`, `DEV_LOG` | Owner plays 3 runs on a phone; deploy URL verified loading |
 
 Bare tier corresponds to M0–M3 with a single turret. Bonus items start only after M7.
 
@@ -746,7 +747,9 @@ Bare tier corresponds to M0–M3 with a single turret. Bonus items start only af
 14. Endless survival with no win state.
 15. Procedural ship meshes, not downloaded kits.
 16. The game ships to GitHub Pages as a public static site with no backend.
-17. Dates in Section 13.2 start Monday 2026-09-08.
+17. Dates in Section 13.2 start Tuesday 2026-09-08.
+
+**Other decisions labeled in the body, listed for completeness:** portrait 9:16 on every device (2.3); 1 fu = 10 m (3.2); fixed sun at 38° elevation, 30° azimuth (3.3); no fire button (4.2); the cruiser holds position in Tactical Mode (4.3); the simulation is 2.5D (5.1); scrap is never lost on damage (5.4); at most 3 clamped boarders (5.5); no upgrades (5.7); no physics engine, React or state library (7.1); `WebGPURenderer` with TSL (8.2); procedural meshes (8.6); Nubis³ voxel clouds not adopted (9.1); the image model ID is a script flag (10.2).
 
 **Open questions:**
 1. Which phones and which desktop can the owner test on? The tiers in Section 2.3 and the gates in Section 12.4 depend on real hardware the agent does not have.
@@ -787,8 +790,8 @@ Named without links, because no verified URL was available from this session: Wr
     { "id": "breach-port-aft", "x": 0, "y": 10, "kind": "breach", "side": "port", "hullRange": [0.0, 0.55] },
     { "id": "n12", "x": 6, "y": 26, "kind": "junction" },
     { "id": "core-approach-bow", "x": 6, "y": 4, "kind": "junction" },
-    { "id": "core-approach-port", "x": 3, "y": 2, "kind": "junction" },
-    { "id": "core-approach-stbd", "x": 9, "y": 2, "kind": "junction" },
+    { "id": "core-approach-port", "x": 3, "y": 1, "kind": "junction" },
+    { "id": "core-approach-stbd", "x": 9, "y": 1, "kind": "junction" },
     { "id": "core", "x": 6, "y": 1, "kind": "core" }
   ],
   "edges": [
@@ -803,7 +806,8 @@ Named without links, because no verified URL was available from this session: Wr
 }
 ```
 
-- `hullRange` is the fraction of hull length (0 = stern, 1 = bow); `side` disambiguates port and starboard breaches. A boarder's impact point maps to the breach whose range and side match.
+- `hullRange` is the fraction of hull length (0 = stern, 1 = bow), with the upper bound exclusive except for the bow range; `side` disambiguates port and starboard breaches. A boarder's impact point maps to the breach whose range and side match.
+- `lengthDu` is authoritative for pathing and range; node coordinates are for drawing and validation only.
 - `adjacentEdges` defines which corridors a slot's turret can see; range is measured along the graph, not as a straight line, so bulkheads block fire.
 - Validation at load: every breach has a path to the core; the core has exactly three incoming edges from three distinct approach nodes; no edge shared by two breach routes is longer than 3 du; no slot lies within 6 du of the core along the graph; every slot touches at least one edge; no two slots share a cell.
 
@@ -828,12 +832,12 @@ export const balance = {
   lancer: { hp: 20, speed: 24, holdZ: 90, holdS: 20, strafeFu: 20, torpEvery: 4, torpSpeed: 35,
             torpTurnDeg: 20, torpDamage: 18, torpHp: 6, ramDamage: 20, scrap: 5, fromThreat: 2,
             maxAlive: 4, spawnBelowAlive: 3 },
-  grapple: { hp: 45, speed: 45, turnDeg: 35, hullDamage: 8, waves: 2, perWave: 4, firstWaveDelayS: 1.5,
+  grapple: { hp: 45, speed: 45, turnDeg: 35, spawnXRange: 40, hullDamage: 8, waves: 2, perWave: 4, firstWaveDelayS: 1.5,
              waveGapS: 4, scrap: 6, fromThreat: 0 },
-  ram: { hp: 110, speed: 28, turnDeg: 20, hullDamage: 15, waves: 3, perWave: 5, firstWaveDelayS: 1.5,
+  ram: { hp: 110, speed: 28, turnDeg: 20, spawnXRange: 40, hullDamage: 15, waves: 3, perWave: 5, firstWaveDelayS: 1.5,
          waveGapS: 6, scrap: 12, fromThreat: 3 },
   boarding: { maxClamped: 3, droneSpacingDu: 0.5,
-              hullRanges: { bow: [0.85, 1.0], fore: [0.55, 0.85], aft: [0.0, 0.55] } },
+              hullRanges: { bow: [0.85, 1.0], fore: [0.55, 0.85], aft: [0.0, 0.55] } },  // upper bounds exclusive except bow
   drones: { strike: { hp: 10, speed: 4.0, coreDamage: 10 }, assault: { hp: 32, speed: 2.2, coreDamage: 25 } },
   turrets: {
     pd: { cost: 25, rangeDu: 4.5, rps: 10, damage: 3, torpRangeFu: 40, torpResetS: 1.5 },
@@ -851,6 +855,7 @@ export const balance = {
     lancer: { base: 30, decay: 0.9, floor: 8, fromThreat: 2 },
   },
   tactical: { timeScale: 0.2 },
+  input: { dragGain: 1.4 },
   core: { hp: 100 },
   scrap: { driftSpeed: 20, lifeS: 8, magnetAccel: 90 },
   score: { perScrap: 1, perOvershoot: 25 },
@@ -874,3 +879,5 @@ Revision 2 (2026-09-07) applied two independent review passes over revision 1, o
 - Escalation table and formulas reconciled; the time floor tightened from 75 s to 45 s per level; score no longer rewards kills.
 - Cloud integrator replaced with the exact per-step form; multi-scatter octave labels corrected; powder term moved onto light-path optical depth; reprojection now uses a marched cloud depth instead of scene depth; FX attenuate by transmittance to the flight plane instead of total transmittance; step lengths derived from per-tier budgets; Low tier no longer blends history without motion compensation.
 - Vite version corrected to 8.x; the WebGL 2 fallback risk downgraded after a source check of three.js 0.185.1; performance gates moved to the owner's hardware.
+
+Revision 3 (2026-09-07) applied a residual-defect pass: kickoff weekday corrected, auto-aim made class-first, survival-time clock defined, step budgets defined as iteration caps, tier selection and drag gain made unambiguous, the blend refresh recosted at quarter resolution, RGBA8 encodings added for devices without float targets, breach ranges made half-open, the bot build list written out, and AP-style month abbreviations applied.
